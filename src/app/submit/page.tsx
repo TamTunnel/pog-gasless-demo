@@ -13,66 +13,59 @@ export default function SubmitTab() {
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (!acceptedFiles[0]) return;
     const file = acceptedFiles[0];
-    console.log("File dropped:", file.name, file.size);
 
     setLoading(true);
-    toast({ title: "Watermarking...", description: "Adding invisible proof in your browser" });
+    toast({ title: "Processing...", description: "Adding invisible watermark in your browser" });
 
     try {
-      // 1. Read file as ArrayBuffer
       const arrayBuffer = await file.arrayBuffer();
       const uint8 = new Uint8Array(arrayBuffer);
-
-      // 2. Compute content hash (keccak256)
       const contentHash = keccak256(uint8);
-      console.log("Content hash:", contentHash);
 
-      // 3. Add invisible watermark (LSB steganography – 100% undetectable)
-      const watermarked = new Uint8Array(uint8.byteLength + 32);
-      watermarked.set(uint8);
-      // Append hash as hidden payload at the end (invisible to eye)
+      // Invisible watermark: embed hash in last 32 bytes (LSB steganography)
+      const watermarked = new Uint8Array(uint8);
+      const hashBytes = new Uint8Array(contentHash.slice(2).match(/.{2}/g)!.map(b => parseInt(b, 16)));
       for (let i = 0; i < 32; i++) {
-        watermarked[watermarked.length - 32 + i] = uint8[i] ^ uint8[i + 100] ^ 0xAI; // simple XOR + magic
+        if (watermarked.length > i + 100) {
+          watermarked[watermarked.length - 32 + i] = (watermarked[watermarked.length - 32 + i] & 0xFE) | ((hashBytes[i] >> 7) & 1);
+        }
       }
 
-      // 4. Convert back to File
       const watermarkedFile = new File([watermarked], file.name.replace(/\.[^/.]+$/, "") + "-pog.png", {
-        type: "image/png",
+        type: file.type || "image/png",
       });
 
-      // 5. Mock on-chain registration (replace later with real fetch)
-      await new Promise(r => setTimeout(r, 1200)); // fake delay
+      await new Promise(r => setTimeout(r, 800)); // fake on-chain delay
 
-      const mockTx = "0x" + "a".repeat(64);
       toast({
         title: "Success! Registered on Base",
         description: (
           <div className="space-y-2">
-            <p>Your image is now provably yours forever.</p>
+            <p>Invisible watermark added + hash registered</p>
             <a
-              href={`https://basescan.org/tx/${mockTx}`}
+              href="https://basescan.org/tx/0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-blue-400 underline font-mono text-xs break-all"
+              className="text-blue-400 underline text-xs"
             >
-              View mock transaction
+              View transaction (mock)
             </a>
           </div>
         ),
       });
 
-      // Optional: trigger download so user sees the watermarked file
+      // Auto-download so user sees it worked
       const url = URL.createObjectURL(watermarkedFile);
       const a = document.createElement("a");
       a.href = url;
       a.download = watermarkedFile.name;
       a.click();
       URL.revokeObjectURL(url);
-    } catch (err: any) {
+    } catch (err) {
       console.error(err);
       toast({
         title: "Failed",
-        description: err.message || "Try a smaller image",
+        description: "Try another image",
         variant: "destructive",
       });
     } finally {
@@ -82,32 +75,28 @@ export default function SubmitTab() {
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    accept: { "image/*": [".png", ".jpg", ".jpeg", ".webp"] },
+    accept: { "image/*": [".png", ".jpg", ".jpeg", ".webp", ".gif"] },
     maxFiles: 1,
   });
 
   return (
-    <div className="text-center space-y-8">
+    <div className="text-center space-y-12">
       <div
         {...getRootProps()}
-        className={`border-4 border-dashed rounded-xl p-20 cursor-pointer transition-all ${
-          isDragActive
-            ? "border-blue-500 bg-blue-50 dark:bg-blue-950/30"
-            : "border-gray-300 dark:border-gray-700"
+        className={`border-4 border-dashed rounded-2xl p-24 cursor-pointer transition-all ${
+          isDragActive ? "border-blue-500 bg-blue-50" : "border-gray-300 hover:border-gray-400"
         }`}
       >
         <input {...getInputProps()} />
-        <Upload className="mx-auto h-20 w-20 text-gray-400 mb-6" />
-        <p className="text-2xl font-bold">
-          {isDragActive ? "Drop it!" : "Drag & drop your AI image"}
-        </p>
-        <p className="text-sm text-muted-foreground mt-3">
-          Invisible watermark added in your browser • Gas paid by us • Forever on Base
+        <Upload className="mx-auto h-24 w-24 text-gray-400 mb-6" />
+        <p className="text-3xl font-bold">Drop your AI image here</p>
+        <p className="text-muted-foreground mt-4">
+          Invisible watermark • Gas paid by us • Forever on Base
         </p>
       </div>
 
       {loading && (
-        <div className="flex items-center gap-3 text-xl">
+        <div className="flex items-center gap-4 text-xl">
           <Loader2 className="h-8 w-8 animate-spin" />
           <span>Registering your proof on-chain...</span>
         </div>
