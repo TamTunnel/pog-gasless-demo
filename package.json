@@ -32,7 +32,9 @@
     "react-dropzone": "^14.3.2",
     "tailwind-merge": "^2.5.4",
     "tailwindcss-animate": "^1.0.7",
-    "viem": "^2.41.2"
+    "viem": "^2.41.2",
+    "canvas-watermark": "^1.0.4",
+    "keccak": "^3.0.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.17",
