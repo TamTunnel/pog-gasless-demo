@@ -12,7 +12,7 @@ const CONTRACT_ADDRESS = "0xf0D814C2Ff842C695fCd6814Fa8776bEf70814F3";
 const RPC_URL = "https://mainnet.base.org";
 
 const ABI = [
-  "function register(bytes32 contentHash, bytes32 perceptualHash, string calldata tool, string calldata pipeline, bytes32 paramsHash, bytes32 parentHash, bytes calldata attesterSig) external",
+  "function register(bytes32 contentHash, bytes32 perceptualHash, string calldata tool, string calldata pipeline, bytes32 paramsHash, bytes32 parentHash, bytes32 attesterSig) external",
 ];
 
 async function getContract() {
@@ -41,15 +41,14 @@ export async function POST(request: Request) {
 
     const c = await getContract();
 
-    // These values PASS all require() checks on your live contract
     const tx = await c.register(
       contentHash,
-      "0x0000000000000000000000000000000000000000000000000000000000000000",
-      "pog.lzzo.net",                             // ← tool (your domain)
-      "pog.lzzo.net gasless demo",                // ← pipeline
-      "0x0000000000000000000000000000000000000000000000000000000000000000", // paramsHash (dummy)
+      "0x0000000000000000000000000000000000000000000000000000000000000000", // perceptualHash
+      "PoG Demo", // tool (non-empty)
+      "PoG Demo:Flux", // pipeline (non-empty, longer)
+      keccak256(ethers.toUtf8Bytes("prompt seed 42 cfg 7 steps 20")), // paramsHash
       "0x0000000000000000000000000000000000000000000000000000000000000000", // parentHash
-      "0x"                                         // attesterSig empty = allowed
+      "0x0000000000000000000000000000000000000000000000000000000000000000" // attesterSig (32 zeros)
     );
 
     const receipt = await tx.wait();
@@ -61,9 +60,6 @@ export async function POST(request: Request) {
     });
   } catch (error: any) {
     console.error("Register failed:", error);
-    return NextResponse.json(
-      { error: error.shortMessage || error.message || "Transaction failed" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: error.message || "Failed" }, { status: 500 });
   }
 }
