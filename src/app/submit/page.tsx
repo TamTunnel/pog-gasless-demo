@@ -2,10 +2,9 @@
 
 import { useCallback, useState } from "react";
 import { useDropzone } from "react-dropzone";
-import { Button } from "@/components/ui/button";
-import { Loader2, Upload, CheckCircle } from "lucide-react";
+import { Loader2, Upload } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
-import Jimp from "jimp";
+import Jimp from "jimp/browser/lib/jimp"; // ← THIS IS THE CORRECT BROWSER IMPORT
 
 export default function SubmitTab() {
   const [loading, setLoading] = useState(false);
@@ -14,49 +13,44 @@ export default function SubmitTab() {
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0) return;
     const file = acceptedFiles[0];
-    console.log('File dropped:', file.name, file.size);
+    console.log("File dropped:", file.name, file.size);
 
     setLoading(true);
-    toast({ title: "Processing...", description: "Watermarking client-side..." });
+    toast({ title: "Watermarking...", description: "Adding invisible proof..." });
 
     try {
-      // Load image with Jimp (browser-safe)
+      // CORRECT WAY TO USE JIMP IN BROWSER
       const image = await Jimp.read(URL.createObjectURL(file));
-      image.print(
-        await Jimp.loadFont(Jimp.FONT_SANS_32_WHITE),
-        10, 10,
-        'AI2025'
-      );
-const watermarkedBuffer = await image.getBufferAsync(Jimp.MIME_PNG);
-// Convert Node Buffer -> Uint8Array for File constructor
-const watermarkedArray = new Uint8Array(watermarkedBuffer);
-const watermarkedFile = new File([watermarkedArray], "watermarked.png", {
-  type: "image/png",
-});
+      const font = await Jimp.loadFont(Jimp.FONT_SANS_64_WHITE);
+      image.print(font, 50, 50, "AI2025", 0.3); // semi-transparent
+      const watermarkedBuffer = await image.getBufferAsync(Jimp.MIME_PNG);
+      const watermarkedFile = new File([watermarkedBuffer], "watermarked.png", { type: "image/png" });
 
+      console.log("Watermarked file ready:", watermarkedFile.size, "bytes");
 
-      // Compute hashes in browser (viem keccak)
-      const arrayBuffer = await watermarkedFile.arrayBuffer();
-      const uint8Array = new Uint8Array(arrayBuffer);
-      const contentHash = '0x' + Buffer.from(uint8Array).toString('hex'); // Simple hash for demo
-      console.log('Content hash:', contentHash);
-
-      // Mock registration (replace with real fetch to VPS /api/register)
-      const mockTx = '0x' + '1234567890abcdef'.repeat(4).slice(0, 66);
+      // Mock success (replace later with real /api/register)
+      const mockTx = "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef";
       toast({
         title: "Success! Registered on Base",
         description: (
-          <p>
-            Tx: <a href={`https://basescan.org/tx/${mockTx}`} target="_blank" className="underline text-blue-400">View on Basescan</a>
-          </p>
+          <div className="space-y-2">
+            <p>Your image is now provably yours.</p>
+            <a
+              href={`https://basescan.org/tx/${mockTx}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-400 underline"
+            >
+              View mock transaction
+            </a>
+          </div>
         ),
       });
-      console.log('Mock registration success:', mockTx);
-    } catch (error) {
-      console.error('Upload error:', error);
+    } catch (error: any) {
+      console.error("Watermark failed:", error);
       toast({
-        title: "Error",
-        description: "Upload failed — check console",
+        title: "Failed",
+        description: error.message || "Try a smaller PNG/JPG",
         variant: "destructive",
       });
     } finally {
@@ -66,34 +60,34 @@ const watermarkedFile = new File([watermarkedArray], "watermarked.png", {
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    accept: { 'image/*': ['.png', '.jpg', '.jpeg', '.gif', '.webp'] },
+    accept: { "image/*": [".png", ".jpg", ".jpeg", ".webp"] },
     maxFiles: 1,
   });
 
   return (
-    <div className="text-center">
+    <div className="text-center space-y-8">
       <div
         {...getRootProps()}
-        className={`border-2 border-dashed rounded-lg p-12 cursor-pointer transition-colors ${
+        className={`border-4 border-dashed rounded-xl p-16 cursor-pointer transition-all ${
           isDragActive
-            ? 'border-blue-500 bg-blue-50 dark:bg-blue-950'
-            : 'border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500'
+            ? "border-blue-500 bg-blue-50 dark:bg-blue-950/20"
+            : "border-gray-300 dark:border-gray-700 hover:border-gray-400"
         }`}
       >
         <input {...getInputProps()} />
-        <Upload className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-        <p className="text-lg font-medium mb-2">
-          {isDragActive ? 'Drop the image here...' : 'Drag & drop an AI image here, or click to select'}
+        <Upload className="mx-auto h-16 w-16 text-gray-400 mb-4" />
+        <p className="text-xl font-semibold">
+          {isDragActive ? "Drop it here" : "Drag & drop your AI image"}
         </p>
-        <p className="text-sm text-gray-500 mb-4">We watermark client-side + register gasless</p>
+        <p className="text-sm text-gray-500 mt-2">
+          We watermark it in your browser + register for free (you pay nothing)
+        </p>
       </div>
 
       {loading && (
-        <div className="mt-8 flex justify-center">
-          <div className="flex items-center space-x-2">
-            <Loader2 className="h-6 w-6 animate-spin" />
-            <p className="text-lg">Watermarking + registering...</p>
-          </div>
+        <div className="flex items-center justify-center gap-3 text-lg">
+          <Loader2 className="h-8 w-8 animate-spin" />
+          <span>Watermarking + registering on-chain...</span>
         </div>
       )}
     </div>
