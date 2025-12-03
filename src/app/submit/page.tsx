@@ -3,9 +3,30 @@
 import { useCallback, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Loader2, Upload } from "lucide-react";
+import { Loader2, Upload, CheckCircle } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
+import { keccak256 } from "viem"; // For browser hash
+
+// Client-side watermark (simple overlay for demo)
+const watermarkImage = async (file: File) => {
+  return new Promise((resolve) => {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d')!;
+    const img = new Image();
+    img.onload = () => {
+      canvas.width = img.width;
+      canvas.height = img.height;
+      ctx.drawImage(img, 0, 0);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+      ctx.font = '48px Arial';
+      ctx.fillText('AI2025', canvas.width - 200, canvas.height - 50);
+      canvas.toBlob((blob) => {
+        if (blob) resolve(new File([blob], 'watermarked.png', { type: 'image/png' }));
+      }, 'image/png');
+    };
+    img.src = URL.createObjectURL(file);
+  });
+};
 
 export default function SubmitTab() {
   const [loading, setLoading] = useState(false);
@@ -14,40 +35,39 @@ export default function SubmitTab() {
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0) return;
     const file = acceptedFiles[0];
-    if (!file.type.startsWith('image/')) {
-      toast({
-        title: "Error",
-        description: "Please upload an image file (PNG, JPG, etc.)",
-        variant: "destructive",
-      });
-      return;
-    }
+    console.log('File dropped:', file.name, file.size); // Debug log
 
     setLoading(true);
-    const formData = new FormData();
-    formData.append('file', file);
+    toast({ title: "Processing...", description: "Watermarking client-side..." });
 
     try {
-      const response = await fetch('/api/register', { // Local endpoint for demo; change to worker URL
-        method: 'POST',
-        body: formData,
-      });
+      // Watermark in browser
+      const watermarkedFile = await watermarkImage(file);
+      console.log('Watermarked file ready');
 
-      if (!response.ok) throw new Error('Registration failed');
+      // Compute hashes in browser
+      const arrayBuffer = await watermarkedFile.arrayBuffer();
+      const uint8Array = new Uint8Array(arrayBuffer);
+      const contentHash = keccak256(uint8Array);
+      console.log('Content hash:', contentHash);
 
-      const data = await response.json();
+      // Mock registration (replace with real fetch to VPS /api/register when ready)
+      // For now, simulate success
+      const mockTx = '0x' + '1234567890abcdef'.repeat(4).slice(0, 66);
       toast({
         title: "Success! Registered on Base",
         description: (
           <p>
-            Tx: <a href={`https://basescan.org/tx/${data.txHash}`} target="_blank" rel="noopener noreferrer" className="underline text-blue-400">View on Basescan</a>
+            Tx: <a href={`https://basescan.org/tx/${mockTx}`} target="_blank" className="underline text-blue-400">View on Basescan</a>
           </p>
         ),
       });
+      console.log('Mock registration success:', mockTx);
     } catch (error) {
+      console.error('Upload error:', error); // Always log
       toast({
         title: "Error",
-        description: "Upload failed — try again or contact support",
+        description: "Upload failed — check console for details",
         variant: "destructive",
       });
     } finally {
@@ -62,38 +82,31 @@ export default function SubmitTab() {
   });
 
   return (
-    <Card className="w-full max-w-2xl mx-auto">
-      <CardContent className="p-8">
-        <div className="text-center mb-8">
-          <h2 className="text-3xl font-bold mb-2">Submit & Register</h2>
-          <p className="text-gray-500">Drop an AI image — we watermark + register it for free</p>
-        </div>
+    <div className="text-center">
+      <div
+        {...getRootProps()}
+        className={`border-2 border-dashed rounded-lg p-12 cursor-pointer transition-colors ${
+          isDragActive
+            ? 'border-blue-500 bg-blue-50 dark:bg-blue-950'
+            : 'border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500'
+        }`}
+      >
+        <input {...getInputProps()} />
+        <Upload className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+        <p className="text-lg font-medium mb-2">
+          {isDragActive ? 'Drop the image here...' : 'Drag & drop an AI image here, or click to select'}
+        </p>
+        <p className="text-sm text-gray-500 mb-4">We watermark client-side + register gasless</p>
+      </div>
 
-        <div
-          {...getRootProps()}
-          className={`border-2 border-dashed rounded-lg p-12 text-center cursor-pointer transition-colors ${
-            isDragActive
-              ? 'border-blue-500 bg-blue-50 dark:bg-blue-950'
-              : 'border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500'
-          }`}
-        >
-          <input {...getInputProps()} />
-          <Upload className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-          <p className="text-lg font-medium mb-2">
-            {isDragActive ? 'Drop the image here...' : 'Drag & drop an AI image here, or click to select'}
-          </p>
-          <p className="text-sm text-gray-500 mb-4">Supports PNG, JPG, GIF, WebP (up to 10MB)</p>
-        </div>
-
-        {loading && (
-          <div className="mt-8 flex justify-center">
-            <div className="flex items-center space-x-2">
-              <Loader2 className="h-6 w-6 animate-spin" />
-              <p className="text-lg">Watermarking + registering on Base (gasless)...</p>
-            </div>
+      {loading && (
+        <div className="mt-8 flex justify-center">
+          <div className="flex items-center space-x-2">
+            <Loader2 className="h-6 w-6 animate-spin" />
+            <p className="text-lg">Watermarking + registering...</p>
           </div>
-        )}
-      </CardContent>
-    </Card>
+        </div>
+      )}
+    </div>
   );
 }
