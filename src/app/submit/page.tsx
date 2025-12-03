@@ -27,14 +27,16 @@ export default function SubmitTab() {
         const arrayBuffer = await file.arrayBuffer();
         let uint8 = new Uint8Array(arrayBuffer);
 
-        // 1. Exact contentHash
+        // Exact contentHash
         const contentHash = keccak256(uint8);
 
-        // 2. Invisible LSB watermark — force last 32 bytes LSB = 1
+        // Invisible LSB watermark — force last 32 bytes LSB = 1
         const watermarked = new Uint8Array(uint8);
         for (let i = 0; i < 32; i++) {
           const idx = watermarked.length - 32 + i;
-          if (idx >= 0) watermarked[idx] = (watermarked[idx] | 1) as number;
+          if (idx >= 0) {
+            watermarked[idx] = (watermarked[idx] | 1) as number;
+          }
         }
 
         const watermarkedFile = new File(
@@ -43,7 +45,7 @@ export default function SubmitTab() {
           { type: "image/png" }
         );
 
-        // 3. Send to backend (parentHash optional)
+        // Send to backend
         const formData = new FormData();
         formData.append("file", watermarkedFile);
         if (parentHash && /^0x[a-fA-F0-9]{64}$/.test(parentHash)) {
@@ -113,3 +115,43 @@ export default function SubmitTab() {
         <input {...getInputProps()} />
         <Upload className="mx-auto h-12 w-12 text-gray-400" />
         <p className="mt-4 text-lg">
+          {isDragActive ? "Drop your AI image here" : "Drag & drop an AI image, or click to select"}
+        </p>
+        <p className="text-sm text-gray-400 mt-2">Free on-chain registration (sponsor pays gas)</p>
+      </div>
+
+      {loading && (
+        <div className="flex items-center justify-center gap-3">
+          <Loader2 className="h-5 w-5 animate-spin" />
+          <span>Registering on Base…</span>
+        </div>
+      )}
+
+      <div className="space-y-4">
+        <div className="flex items-center space-x-2">
+          <Checkbox
+            id="download"
+            checked={downloadChecked}
+            onCheckedChange={(c) => setDownloadChecked(c as boolean)}
+          />
+          <Label htmlFor="download">Download watermarked copy</Label>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="parent">Parent contentHash (for edits — optional)</Label>
+          <input
+            id="parent"
+            type="text"
+            placeholder="0x0000000000000000000000000000000000000000000000000000000000000000"
+            value={parentHash}
+            onChange={(e) => setParentHash(e.target.value.trim())}
+            className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-md text-sm font-mono"
+          />
+          <p className="text-xs text-gray-400">
+            Paste contentHash from previous version to prove this is an edit
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
