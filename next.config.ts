@@ -1,16 +1,15 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  experimental: {
-    turbopack: true,
-  },
   images: {
     remotePatterns: [
       {
-        protocol: 'https',
-        hostname: '**',
+        protocol: "https",
+        hostname: "**",
       },
     ],
   },
+  // Remove experimental.turbopack — it's invalid in Next.js 16 stable
+  // Turbopack is now default when you use `next dev`, no need to force it
 }
 
-module.exports = nextConfig
+export default nextConfig
