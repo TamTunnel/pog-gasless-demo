@@ -12,7 +12,7 @@ const CONTRACT_ADDRESS = "0xf0D814C2Ff842C695fCd6814Fa8776bEf70814F3";
 const RPC_URL = "https://mainnet.base.org";
 
 const ABI = [
-  "function register(bytes32 contentHash, bytes32 perceptualHash, string calldata tool, string calldata pipeline, bytes32 paramsHash, bytes32 parentHash, bytes attesterSig) external",
+  "function register(bytes32 contentHash, bytes32 perceptualHash, string calldata tool, string calldata pipeline, bytes32 paramsHash, bytes32 parentHash, bytes calldata attesterSig) external",
 ];
 
 async function getContract() {
@@ -41,14 +41,15 @@ export async function POST(request: Request) {
 
     const c = await getContract();
 
+    // These values PASS all require() checks on your live contract
     const tx = await c.register(
       contentHash,
       "0x0000000000000000000000000000000000000000000000000000000000000000",
-      "DemoTool",
-      "DemoTool:Flux",
-      keccak256(ethers.toUtf8Bytes("demo prompt")),
-      "0x0000000000000000000000000000000000000000000000000000000000000000",
-      "0x"   // ← empty bytes for attesterSig (valid!)
+      "pog.lzzo.net",                             // ← tool (your domain)
+      "pog.lzzo.net gasless demo",                // ← pipeline
+      "0x0000000000000000000000000000000000000000000000000000000000000000", // paramsHash (dummy)
+      "0x0000000000000000000000000000000000000000000000000000000000000000", // parentHash
+      "0x"                                         // attesterSig empty = allowed
     );
 
     const receipt = await tx.wait();
@@ -60,6 +61,9 @@ export async function POST(request: Request) {
     });
   } catch (error: any) {
     console.error("Register failed:", error);
-    return NextResponse.json({ error: error.message || "Failed" }, { status: 500 });
+    return NextResponse.json(
+      { error: error.shortMessage || error.message || "Transaction failed" },
+      { status: 500 }
+    );
   }
 }
