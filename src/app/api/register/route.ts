@@ -9,9 +9,7 @@ if (!PRIVATE_KEY) {
   throw new Error("Missing POG_SPONSOR_KEY environment variable");
 }
 if (!PRIVATE_KEY.startsWith("0x") || PRIVATE_KEY.length !== 66) {
-  throw new Error(
-    "POG_SPONSOR_KEY must be a valid 66-character private key starting with 0x"
-  );
+  throw new Error("POG_SPONSOR_KEY must be a valid 66-character private key starting with 0x");
 }
 
 const provider = new ethers.JsonRpcProvider("https://mainnet.base.org");
@@ -30,21 +28,32 @@ export async function POST(request: Request) {
     const file = formData.get("file") as File;
     if (!file) return NextResponse.json({ error: "No file" }, { status: 400 });
 
-     const arrayBuffer = await file.arrayBuffer();
+    const arrayBuffer = await file.arrayBuffer();
     const uint8Array = new Uint8Array(arrayBuffer);
     const contentHash = keccak256(uint8Array);
 
     const tx = await contract.register(
       contentHash,
-      "0x0000000000000000000000000000000000000000000000000000000000000000", // perceptualHash (placeholder)
-      "Demo",                                                                 // tool
-      "Flux",                                                                 // model
-      "0x0000000000000000000000000000000000000000000000000000000000000000", // modelHash
-      "0x",                                                                   // extraData
-      "0x"                                                                    // signature
+      "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "Demo",
+      "Flux",
+      "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "0x",
+      "0x"
     );
 
     const receipt = await tx.wait();
 
     return NextResponse.json({
-      success
+      success: true,
+      txHash: receipt.hash,
+      explorer: `https://basescan.org/tx/${receipt.hash}`,
+    });
+  } catch (error: any) {
+    console.error("Registration failed:", error);
+    return NextResponse.json(
+      { error: error.message || "Transaction failed" },
+      { status: 500 }
+    );
+  }
+}
