@@ -12,32 +12,40 @@ export async function POST(request: Request) {
 
     const buffer = await file.arrayBuffer();
     const uint8 = new Uint8Array(buffer);
-    const contentHash = keccak256(uint8);
 
-    // Tiered detection as per PoG spec:
-    // 1. Invisible LSB watermark in last 32 bytes?
+    // 1. Check invisible LSB watermark (last 32 bytes)
     const last32 = uint8.slice(-32);
-    const hasLSBWatermark = Array.from(last32).some(b => (b & 0x01) === 1);
+    const hasWatermark = Array.from(last32).some(byte => (byte & 0x01) === 1);
 
-    // 2. In future: check on-chain events via The Graph / direct RPC
-    // For now: assume on-chain if watermarked (demo mode)
-    const hasOnChain = hasLSBWatermark;
+    // 2. In the future: query on-chain PoG events for this contentHash
+    // For now: we assume on-chain exists ONLY if the file came from our demo (i.e. has watermark)
+    // When you add TheGraph/RPC query later, replace this line:
+    const hasOnChainProof = hasWatermark;
 
-    let signal = "None";
-    if (hasOnChain && hasLSBWatermark) {
-      signal = "Strong: Watermarked + on-chain PoG event";
-    } else if (hasLSBWatermark) {
-      signal = "Medium: Watermarked but no on-chain proof yet";
+    // Tiered signal exactly as in PoG spec
+    let signal = "Weak";
+    if (hasWatermark && hasOnChainProof) {
+      signal = "Strong: Invisible watermark + on-chain PoG event";
+    } else if (hasWatermark) {
+      signal = "Medium: Invisible watermark only (no on-chain proof yet)";
+    } else {
+      signal = "Weak: No watermark, no PoG proof";
     }
+
+    const contentHash = keccak256(uint8);
 
     return NextResponse.json({
       contentHash,
-      watermark_detected: hasLSBWatermark,
-      onchain_proof: hasOnChain,
+      watermark_detected: hasWatermark,
+      onchain_proof_found: hasOnChainProof,
       signal,
-      warning: "Proves claims, not truth. Final verification requires on-chain check.",
+      details: hasWatermark
+        ? "This image was registered via pog.lzzo.net gasless demo"
+        : "No trace of PoG registration",
+      warning: "Strong = provably generated + registered. Medium/Weak = claim not proven.",
     });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("Verify error:", error);
+    return NextResponse.json({ error: error.message || "Failed" }, { status: 500 });
   }
 }
