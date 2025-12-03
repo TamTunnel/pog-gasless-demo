@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { ethers } from "ethers";
 import { keccak256 } from "viem";
 
-export const dynamic = "force-dynamic"; // ← CRITICAL: runtime-only
+export const dynamic = "force-dynamic";
 
 let wallet: ethers.Wallet | null = null;
 let contract: ethers.Contract | null = null;
@@ -48,7 +48,7 @@ export async function POST(request: Request) {
       "DemoTool:Flux",
       keccak256(ethers.toUtf8Bytes("demo prompt")),
       "0x0000000000000000000000000000000000000000000000000000000000000000",
-      "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+      "0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001b" // 65-byte dummy
     );
 
     const receipt = await tx.wait();
