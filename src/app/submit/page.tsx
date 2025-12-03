@@ -30,14 +30,14 @@ export default function SubmitTab() {
         // Exact contentHash
         const contentHash = keccak256(uint8);
 
-        // Invisible LSB watermark — force last 32 bytes LSB = 1
-        const watermarked = new Uint8Array(uint8);
-        for (let i = 0; i < 32; i++) {
-          const idx = watermarked.length - 32 + i;
-          if (idx >= 0) {
-            watermarked[idx] = (watermarked[idx] | 1) as number;
-          }
-        }
+// In onDrop function — replace the watermark section with this:
+const watermarked = new Uint8Array(uint8);
+
+// Force last 32 bytes to have LSB = 1
+const startIdx = Math.max(0, watermarked.length - 32);
+for (let i = startIdx; i < watermarked.length; i++) {
+  watermarked[i] = watermarked[i] | 1;
+}
 
         const watermarkedFile = new File(
           [watermarked],
