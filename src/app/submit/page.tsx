@@ -27,9 +27,13 @@ export default function SubmitTab() {
         10, 10,
         'AI2025'
       );
-      const watermarkedBuffer = await image.getBufferAsync(Jimp.MIME_PNG);
-      const watermarkedFile = new File([watermarkedBuffer], 'watermarked.png', { type: 'image/png' });
-      console.log('Watermarked file ready');
+const watermarkedBuffer = await image.getBufferAsync(Jimp.MIME_PNG);
+// Convert Node Buffer -> Uint8Array for File constructor
+const watermarkedArray = new Uint8Array(watermarkedBuffer);
+const watermarkedFile = new File([watermarkedArray], "watermarked.png", {
+  type: "image/png",
+});
+
 
       // Compute hashes in browser (viem keccak)
       const arrayBuffer = await watermarkedFile.arrayBuffer();
