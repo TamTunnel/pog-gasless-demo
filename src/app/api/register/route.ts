@@ -3,7 +3,8 @@ import { NextResponse } from "next/server";
 import { ethers } from "ethers";
 import { keccak256 } from "viem";
 
-// DO NOT touch this file during build — everything is lazy-loaded
+export const dynamic = "force-dynamic"; // ← CRITICAL: runtime-only
+
 let wallet: ethers.Wallet | null = null;
 let contract: ethers.Contract | null = null;
 
@@ -18,20 +19,15 @@ async function getContract() {
   if (contract) return contract;
 
   const PRIVATE_KEY = process.env.POG_PRIVATE_KEY;
-  if (!PRIVATE_KEY) {
-    throw new Error("POG_PRIVATE_KEY is missing (runtime env var required)");
-  }
-  if (!PRIVATE_KEY.startsWith("0x") || PRIVATE_KEY.length !== 66) {
-    throw new Error("POG_PRIVATE_KEY must be 66 chars starting with 0x");
-  }
+  if (!PRIVATE_KEY) throw new Error("POG_PRIVATE_KEY missing (runtime env)");
+  if (!PRIVATE_KEY.startsWith("0x") || PRIVATE_KEY.length !== 66)
+    throw new Error("Invalid POG_PRIVATE_KEY format");
 
   const provider = new ethers.JsonRpcProvider(RPC_URL);
   wallet = new ethers.Wallet(PRIVATE_KEY, provider);
   contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, wallet);
   return contract;
 }
-
-export const dynamic = "force-dynamic"; // Critical: disables build-time evaluation
 
 export async function POST(request: Request) {
   try {
@@ -63,10 +59,7 @@ export async function POST(request: Request) {
       explorer: `https://basescan.org/tx/${receipt.hash}`,
     });
   } catch (error: any) {
-    console.error("Registration failed:", error);
-    return NextResponse.json(
-      { error: error.message || "Transaction failed" },
-      { status: 500 }
-    );
+    console.error("Register error:", error);
+    return NextResponse.json({ error: error.message || "Failed" }, { status: 500 });
   }
 }
