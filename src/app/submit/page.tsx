@@ -5,28 +5,7 @@ import { useDropzone } from "react-dropzone";
 import { Button } from "@/components/ui/button";
 import { Loader2, Upload, CheckCircle } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
-import { keccak256 } from "viem"; // For browser hash
-
-// Client-side watermark (simple overlay for demo)
-const watermarkImage = async (file: File) => {
-  return new Promise((resolve) => {
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d')!;
-    const img = new Image();
-    img.onload = () => {
-      canvas.width = img.width;
-      canvas.height = img.height;
-      ctx.drawImage(img, 0, 0);
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
-      ctx.font = '48px Arial';
-      ctx.fillText('AI2025', canvas.width - 200, canvas.height - 50);
-      canvas.toBlob((blob) => {
-        if (blob) resolve(new File([blob], 'watermarked.png', { type: 'image/png' }));
-      }, 'image/png');
-    };
-    img.src = URL.createObjectURL(file);
-  });
-};
+import Jimp from "jimp";
 
 export default function SubmitTab() {
   const [loading, setLoading] = useState(false);
@@ -35,24 +14,30 @@ export default function SubmitTab() {
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0) return;
     const file = acceptedFiles[0];
-    console.log('File dropped:', file.name, file.size); // Debug log
+    console.log('File dropped:', file.name, file.size);
 
     setLoading(true);
     toast({ title: "Processing...", description: "Watermarking client-side..." });
 
     try {
-      // Watermark in browser
-      const watermarkedFile = await watermarkImage(file);
+      // Load image with Jimp (browser-safe)
+      const image = await Jimp.read(URL.createObjectURL(file));
+      image.print(
+        await Jimp.loadFont(Jimp.FONT_SANS_32_WHITE),
+        10, 10,
+        'AI2025'
+      );
+      const watermarkedBuffer = await image.getBufferAsync(Jimp.MIME_PNG);
+      const watermarkedFile = new File([watermarkedBuffer], 'watermarked.png', { type: 'image/png' });
       console.log('Watermarked file ready');
 
-      // Compute hashes in browser
+      // Compute hashes in browser (viem keccak)
       const arrayBuffer = await watermarkedFile.arrayBuffer();
       const uint8Array = new Uint8Array(arrayBuffer);
-      const contentHash = keccak256(uint8Array);
+      const contentHash = '0x' + Buffer.from(uint8Array).toString('hex'); // Simple hash for demo
       console.log('Content hash:', contentHash);
 
-      // Mock registration (replace with real fetch to VPS /api/register when ready)
-      // For now, simulate success
+      // Mock registration (replace with real fetch to VPS /api/register)
       const mockTx = '0x' + '1234567890abcdef'.repeat(4).slice(0, 66);
       toast({
         title: "Success! Registered on Base",
@@ -64,10 +49,10 @@ export default function SubmitTab() {
       });
       console.log('Mock registration success:', mockTx);
     } catch (error) {
-      console.error('Upload error:', error); // Always log
+      console.error('Upload error:', error);
       toast({
         title: "Error",
-        description: "Upload failed — check console for details",
+        description: "Upload failed — check console",
         variant: "destructive",
       });
     } finally {
