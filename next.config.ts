@@ -1,5 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  experimental: {
+    turbopack: false, // Force webpack — kills PostCSS phantom error
+  },
   images: {
     remotePatterns: [
       {
@@ -7,6 +10,10 @@ const nextConfig = {
         hostname: "**",
       },
     ],
+  },
+  webpack: (config) => {
+    config.resolve.fallback = { ...config.resolve.fallback, fs: false };
+    return config;
   },
 };
 
