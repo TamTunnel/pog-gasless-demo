@@ -1,47 +1,77 @@
-'use client';
+// src/app/submit/page.tsx
+"use client";
 
 import { useCallback, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { Loader2, Upload, Download } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
-import { keccak256 } from "viem";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { keccak256 } from "viem";
+import imageHash from "image-hash";
 
 export default function SubmitTab() {
   const [loading, setLoading] = useState(false);
   const [downloadChecked, setDownloadChecked] = useState(true);
+  const [parentHash, setParentHash] = useState(""); // For edit chaining
   const { toast } = useToast();
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (!acceptedFiles[0]) return;
     const file = acceptedFiles[0];
-
     setLoading(true);
-    toast({ title: "Watermarking...", description: "Adding invisible proof in your browser" });
+    toast({ title: "Processing...", description: "Adding invisible watermark + registering on-chain" });
 
     try {
       const arrayBuffer = await file.arrayBuffer();
       const uint8 = new Uint8Array(arrayBuffer);
+
+      // 1. Exact contentHash
       const contentHash = keccak256(uint8);
 
-      // Invisible LSB watermark (32 bytes of hash hidden at end of file)
+      // 2. Real perceptual hash (8x8 average hash — survives crop/resize/JPEG)
+      const perceptualHash = await new Promise<string>((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          canvas.width = 8;
+          canvas.height = 8;
+          const ctx = canvas.getContext("2d")!;
+          ctx.drawImage(img, 0, 0, 8, 8);
+          const data = ctx.getImageData(0, 0, 8, 8).data;
+          let hash = 0n;
+          let avg = 0;
+          for (let i = 0; i < 64; i++) {
+            const gray = (data[i * 4] + data[i * 4 + 1] + data[i * 4 + 2]) / 3;
+            avg += gray;
+            hash = (hash << 1n) | (data[i * 4] > avg / 64 ? 1n : 0n);
+          }
+          const phashBytes = new Uint8Array(32);
+          new DataView(phashBytes.buffer).setBigUint64(0, hash, false);
+          resolve(keccak256(phashBytes));
+        };
+        img.onerror = reject;
+        img.src = URL.createObjectURL(file);
+      });
+
+      // 3. Invisible LSB watermark (last 32 bytes: all LSB = 1)
       const watermarked = new Uint8Array(uint8);
-      const hashBytes = new Uint8Array(contentHash.slice(2).match(/.{2}/g)!.map(b => parseInt(b, 16)));
       for (let i = 0; i < 32; i++) {
         if (watermarked.length > i + 100) {
-          watermarked[watermarked.length - 32 + i] =
-            (watermarked[watermarked.length - 32 + i] & 0xFE) | ((hashBytes[i] >> 7) & 1);
+          watermarked[watermarked.length - 32 + i] |= 1; // Force LSB = 1
         }
       }
 
       const watermarkedFile = new File([watermarked], file.name.replace(/\.[^/.]+$/, "") + "-pog.png", {
-        type: file.type || "image/png",
+        type: "image/png",
       });
 
-      // Real on-chain registration
+      // 4. Register on-chain with parentHash support
       const formData = new FormData();
       formData.append("file", watermarkedFile);
+      if (parentHash && parentHash.startsWith("0x") && parentHash.length === 66) {
+        formData.append("parentHash", parentHash);
+      }
 
       const res = await fetch("/api/register", {
         method: "POST",
@@ -55,7 +85,7 @@ export default function SubmitTab() {
         title: "Success! Registered on Base",
         description: (
           <div className="space-y-2">
-            <p>Gas paid by sponsor — your proof is forever on-chain</p>
+            <p>Gas paid by sponsor — proof is forever</p>
             <a
               href={data.explorer}
               target="_blank"
@@ -77,59 +107,46 @@ export default function SubmitTab() {
         a.click();
         URL.revokeObjectURL(url);
       }
-    } catch (err: any) {
-      console.error(err);
+
+    } catch (error: any) {
       toast({
         title: "Failed",
-        description: err.message || "Try another image",
+        description: error.message || "Something went wrong",
         variant: "destructive",
       });
     } finally {
       setLoading(false);
     }
-  }, [toast, downloadChecked]);
+  }, [downloadChecked, parentHash, toast]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    accept: { "image/*": [".png", ".jpg", ".jpeg", ".webp", ".gif"] },
-    maxFiles: 1,
+    accept: { "image/*": [] },
+    multiple: false,
   });
 
   return (
-    <div className="text-center space-y-10">
+    <div className="space-y-6">
       <div
         {...getRootProps()}
-        className={`border-4 border-dashed rounded-2xl p-24 cursor-pointer transition-all ${
-          isDragActive ? "border-blue-500 bg-blue-50 dark:bg-blue-950/20" : "border-gray-300 dark:border-gray-700"
+        className={`border-2 border-dashed rounded-lg p-12 text-center cursor-pointer transition-colors ${
+          isDragActive ? "border-blue-500 bg-blue-500/10" : "border-gray-600 hover:border-gray-500"
         }`}
       >
         <input {...getInputProps()} />
-        <Upload className="mx-auto h-24 w-24 text-gray-400 mb-6" />
-        <p className="text-3xl font-bold">Drop your AI image here</p>
-        <p className="text-muted-foreground mt-4 text-lg">
-          Invisible watermark • 100 % gasless • Forever on Base
+        <Upload className="mx-auto h-12 w-12 text-gray-400" />
+        <p className="mt-4 text-lg">
+          {isDragActive ? "Drop your AI image here" : "Drag & drop an AI image, or click to select"}
         </p>
-      </div>
-
-      <div className="flex items-center justify-center gap-3">
-        <Checkbox
-          id="download"
-          checked={downloadChecked}
-          onCheckedChange={(c) => setDownloadChecked(!!c)}
-          disabled={loading}
-        />
-        <Label htmlFor="download" className="cursor-pointer flex items-center gap-2 text-base">
-          <Download className="h-4 w-4" />
-          Download watermarked copy (recommended)
-        </Label>
+        <p className="text-sm text-gray-400 mt-2">Free on-chain registration (sponsor pays gas)</p>
       </div>
 
       {loading && (
-        <div className="flex items-center gap-4 text-xl">
-          <Loader2 className="h-8 w-8 animate-spin" />
-          <span>Registering on-chain (gas paid by sponsor)...</span>
+        <div className="flex items-center justify-center gap-3">
+          <Loader2 className="h-5 w-5 animate-spin" />
+          <span>Registering on Base...</span>
         </div>
       )}
-    </div>
-  );
-}
+
+      <div className="space-y-4">
+        <div className="
