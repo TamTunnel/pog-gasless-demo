@@ -35,6 +35,8 @@
     "eslint-config-next": "16.0.6",
     "postcss": "^8.5.0",
     "tailwindcss": "^3.4.17",
-    "typescript": "^5"
+    "typescript": "^5",
+    "webpack": "^5.x.x",
+    "@types/webpack": "^5.x.x"
   }
 }
