@@ -1,0 +1,31 @@
+name: Update package-lock
+
+on:
+  workflow_dispatch:        # allow manual run
+  schedule:
+    - cron: "0 3 * * 1"     # every Monday at 03:00 UTC
+
+jobs:
+  update-lockfile:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write       # needed to push commits
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # Regenerate lockfile without changing package.json
+      - name: Install deps and update lockfile
+        run: npm install --package-lock-only
+
+      - name: Commit lockfile if changed
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: update package-lock.json"
+          file_pattern: "package-lock.json"
