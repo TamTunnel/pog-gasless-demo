@@ -1,32 +1,41 @@
 // src/app/api/register/route.ts
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { ethers } from "ethers";
 import { keccak256 } from "viem";
-
-const PRIVATE_KEY = process.env.POG_SPONSOR_KEY;
-
-if (!PRIVATE_KEY) {
-  throw new Error("Missing POG_SPONSOR_KEY environment variable");
-}
-if (!PRIVATE_KEY.startsWith("0x") || PRIVATE_KEY.length !== 66) {
-  throw new Error("POG_SPONSOR_KEY must be a valid 66-character private key starting with 0x");
-}
-
-const provider = new ethers.JsonRpcProvider("https://mainnet.base.org");
-const wallet = new ethers.Wallet(PRIVATE_KEY, provider);
 
 const CONTRACT_ADDRESS = "0xf0D814C2Ff842C695fCd6814Fa8776bEf70814F3";
 const ABI = [
   "function register(bytes32 contentHash, bytes32 perceptualHash, string tool, string model, bytes32 modelHash, bytes extraData, bytes signature) external",
 ];
 
-const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, wallet);
-
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
+    const PRIVATE_KEY_RAW = process.env.POG_SPONSOR_KEY;
+
+    if (!PRIVATE_KEY_RAW) {
+      return NextResponse.json(
+        { error: "Server misconfigured: missing POG_SPONSOR_KEY" },
+        { status: 500 }
+      );
+    }
+
+    const PRIVATE_KEY = PRIVATE_KEY_RAW.trim().replace(/^"|"$/g, "");
+    if (!PRIVATE_KEY.startsWith("0x") || PRIVATE_KEY.length !== 66) {
+      return NextResponse.json(
+        { error: "Server misconfigured: invalid POG_SPONSOR_KEY format" },
+        { status: 500 }
+      );
+    }
+
+    const provider = new ethers.JsonRpcProvider("https://mainnet.base.org");
+    const wallet = new ethers.Wallet(PRIVATE_KEY, provider);
+    const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, wallet);
+
     const formData = await request.formData();
-    const file = formData.get("file") as File;
-    if (!file) return NextResponse.json({ error: "No file" }, { status: 400 });
+    const file = formData.get("file") as File | null;
+    if (!file) {
+      return NextResponse.json({ error: "No file" }, { status: 400 });
+    }
 
     const arrayBuffer = await file.arrayBuffer();
     const uint8Array = new Uint8Array(arrayBuffer);
@@ -52,7 +61,7 @@ export async function POST(request: Request) {
   } catch (error: any) {
     console.error("Registration failed:", error);
     return NextResponse.json(
-      { error: error.message || "Transaction failed" },
+      { error: error?.message ?? "Transaction failed" },
       { status: 500 }
     );
   }
