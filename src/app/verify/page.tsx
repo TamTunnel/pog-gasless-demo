@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Search, Image as ImageIcon, CheckCircle, AlertCircle } from "lucide-react";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/components/ui/use-toast";  // Keep as-is, but ensure use-toast.ts exists
 
 export default function VerifyTab() {
   const [result, setResult] = useState<any>(null);
