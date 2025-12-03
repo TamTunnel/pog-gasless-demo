@@ -25,12 +25,12 @@ export default function SubmitTab() {
       const uint8 = new Uint8Array(arrayBuffer);
       const contentHash = keccak256(uint8);
 
-      // Invisible watermark via LSB steganography
+      // Invisible LSB watermark (32 bytes of hash hidden at end of file)
       const watermarked = new Uint8Array(uint8);
       const hashBytes = new Uint8Array(contentHash.slice(2).match(/.{2}/g)!.map(b => parseInt(b, 16)));
       for (let i = 0; i < 32; i++) {
         if (watermarked.length > i + 100) {
-          watermarked[watermarked.length - 32 + i] = 
+          watermarked[watermarked.length - 32 + i] =
             (watermarked[watermarked.length - 32 + i] & 0xFE) | ((hashBytes[i] >> 7) & 1);
         }
       }
@@ -39,7 +39,7 @@ export default function SubmitTab() {
         type: file.type || "image/png",
       });
 
-      // Send to your real API route
+      // Real on-chain registration
       const formData = new FormData();
       formData.append("file", watermarkedFile);
 
@@ -49,16 +49,19 @@ export default function SubmitTab() {
       });
 
       const data = await res.json();
-
       if (!res.ok) throw new Error(data.error || "Registration failed");
 
-      // Success!
       toast({
-        title: "Registered on Base — Gas paid by sponsor",
+        title: "Success! Registered on Base",
         description: (
           <div className="space-y-2">
-            <p>Your image is now provably yours forever.</p>
-            <a href={data.explorer} target="_blank" rel="noopener noreferrer" className="text-blue-400 underline text-xs font-mono">
+            <p>Gas paid by sponsor — your proof is forever on-chain</p>
+            <a
+              href={data.explorer}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-400 underline text-xs font-mono"
+            >
               {data.txHash.slice(0, 10)}...{data.txHash.slice(-8)}
             </a>
           </div>
@@ -73,10 +76,9 @@ export default function SubmitTab() {
         a.download = watermarkedFile.name;
         a.click();
         URL.revokeObjectURL(url);
-        toast({ title: "Downloaded", description: `${watermarkedFile.name} saved`, duration: 2000 });
       }
     } catch (err: any) {
- N     console.error(err);
+      console.error(err);
       toast({
         title: "Failed",
         description: err.message || "Try another image",
@@ -116,7 +118,7 @@ export default function SubmitTab() {
           onCheckedChange={(c) => setDownloadChecked(!!c)}
           disabled={loading}
         />
-        <Label htmlFor="download" className="cursor-pointer flex items-center gap-2">
+        <Label htmlFor="download" className="cursor-pointer flex items-center gap-2 text-base">
           <Download className="h-4 w-4" />
           Download watermarked copy (recommended)
         </Label>
