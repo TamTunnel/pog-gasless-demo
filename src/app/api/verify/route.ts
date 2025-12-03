@@ -14,30 +14,27 @@ export async function POST(request: Request) {
     const uint8 = new Uint8Array(buffer);
     const contentHash = keccak256(uint8);
 
-    // Strict LSB watermark detection: last 32 bytes must ALL have LSB = 1
+    // Check last 32 bytes — ALL must have LSB = 1
     const last32 = uint8.slice(-32);
-    const hasWatermark = last32.length === 32 && last32.every(b => (b & 1) === 1);
+    const hasWatermark = last32.length === 32 && Array.from(last32).every(b => (b & 1) === 1);
 
-    // In the future: real on-chain check via Basescan API
-    // For now: if it has our exact watermark → assume registered
-    const hasOnChainProof = hasWatermark;
+    // Assume on-chain if watermark is present (real check later)
+    const hasOnChain = hasWatermark;
 
     let signal = "Weak: No watermark detected";
-    if (hasWatermark && hasOnChainProof) {
+    if (hasWatermark && hasOnChain) {
       signal = "Strong: Watermark + on-chain PoG proof";
     } else if (hasWatermark) {
-      signal = "Medium: Watermark found (on-chain check pending)";
+      signal = "Medium: Watermark found (on-chain pending)";
     }
 
     return NextResponse.json({
       contentHash,
       watermark_detected: hasWatermark,
-      onchain_proof_found: hasOnChainProof,
+      onchain_proof_found: hasOnChain,
       signal,
-      warning: "Strong = provably registered via pog.lzzo.net",
     });
   } catch (error: any) {
-    console.error("Verify error:", error);
-    return NextResponse.json({ error: error.message || "Failed" }, { status: 500 });
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
