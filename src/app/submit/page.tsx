@@ -8,116 +8,130 @@ import { useToast } from "@/components/ui/use-toast";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { keccak256 } from "viem";
-import imageHash from "image-hash";
 
 export default function SubmitTab() {
   const [loading, setLoading] = useState(false);
   const [downloadChecked, setDownloadChecked] = useState(true);
-  const [parentHash, setParentHash] = useState(""); // For edit chaining
+  const [parentHash, setParentHash] = useState("");
   const { toast } = useToast();
 
-  const onDrop = useCallback(async (acceptedFiles: File[]) => {
-    if (!acceptedFiles[0]) return;
-    const file = acceptedFiles[0];
-    setLoading(true);
-    toast({ title: "Processing...", description: "Adding invisible watermark + registering on-chain" });
+  const onDrop = useCallback(
+    async (acceptedFiles: File[]) => {
+      const file = acceptedFiles[0];
+      if (!file) return;
 
-    try {
-      const arrayBuffer = await file.arrayBuffer();
-      const uint8 = new Uint8Array(arrayBuffer);
-
-      // 1. Exact contentHash
-      const contentHash = keccak256(uint8);
-
-      // 2. Real perceptual hash (8x8 average hash — survives crop/resize/JPEG)
-      const perceptualHash = await new Promise<string>((resolve, reject) => {
-        const img = new Image();
-        img.onload = () => {
-          const canvas = document.createElement("canvas");
-          canvas.width = 8;
-          canvas.height = 8;
-          const ctx = canvas.getContext("2d")!;
-          ctx.drawImage(img, 0, 0, 8, 8);
-          const data = ctx.getImageData(0, 0, 8, 8).data;
-          let hash = 0n;
-          let avg = 0;
-          for (let i = 0; i < 64; i++) {
-            const gray = (data[i * 4] + data[i * 4 + 1] + data[i * 4 + 2]) / 3;
-            avg += gray;
-            hash = (hash << 1n) | (data[i * 4] > avg / 64 ? 1n : 0n);
-          }
-          const phashBytes = new Uint8Array(32);
-          new DataView(phashBytes.buffer).setBigUint64(0, hash, false);
-          resolve(keccak256(phashBytes));
-        };
-        img.onerror = reject;
-        img.src = URL.createObjectURL(file);
+      setLoading(true);
+      toast({
+        title: "Processing…",
+        description: "Adding invisible watermark + registering on-chain",
       });
 
-      // 3. Invisible LSB watermark (last 32 bytes: all LSB = 1)
-      const watermarked = new Uint8Array(uint8);
-      for (let i = 0; i < 32; i++) {
-        if (watermarked.length > i + 100) {
-          watermarked[watermarked.length - 32 + i] |= 1; // Force LSB = 1
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        let uint8 = new Uint8Array(arrayBuffer);
+
+        // 1. Exact contentHash (keccak256)
+        const contentHash = keccak256(uint8);
+
+        // 2. Real 8×8 perceptual hash (survives crop/resize/JPEG)
+        const perceptualHash = await new Promise<string>((resolve) => {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement("canvas");
+            canvas.width = 8;
+            canvas.height = 8;
+            const ctx = canvas.getContext("2d")!;
+            ctx.drawImage(img, 0, 0, 8, 8);
+            const data = ctx.getImageData(0, 0, 8, 8).data;
+
+            let hash = 0n;
+            let sum = 0;
+            const pixels: number[] = [];
+
+            for (let i = 0; i < 64; i++) {
+              const gray = (data[i * 4] + data[i * 4 + 1] + data[i * 4 + 2]) / 3;
+              pixels.push(gray);
+              sum += gray;
+            }
+            const avg = sum / 64;
+
+            for (const p of pixels) {
+              hash = (hash << 1n) | (p > avg ? 1n : 0n);
+            }
+
+            const bytes = new Uint8Array(32);
+            new DataView(bytes.buffer).setBigUint64(0, hash, false);
+            resolve(keccak256(bytes));
+          };
+          img.src = URL.createObjectURL(file);
+        });
+
+        // 3. Invisible LSB watermark — force last 32 bytes LSB = 1
+        const watermarked = new Uint8Array(uint8);
+        for (let i = 0; i < 32; i++) {
+          const idx = watermarked.length - 32 + i;
+          if (idx >= 0) watermarked[idx] |= 1;
         }
+
+        const watermarkedFile = new File(
+          [watermarked],
+          file.name.replace(/\.[^/.]+$/, "") + "-pog.png",
+          { type: "image/png" }
+        );
+
+        // 4. Send to backend (parentHash optional for edits)
+        const formData = new FormData();
+        formData.append("file", watermarkedFile);
+        if (parentHash && /^0x[a-fA-F0-9]{64}$/.test(parentHash)) {
+          formData.append("parentHash", parentHash);
+        }
+
+        const res = await fetch("/api/register", {
+          method: "POST",
+          body: formData,
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Failed");
+
+        toast({
+          title: "Success — Registered on Base!",
+          description: (
+            <div className="space-y-1">
+              <p>Gas paid by sponsor — proof is permanent</p>
+              <a
+                href={data.explorer}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-400 underline text-xs font-mono block"
+              >
+                {data.txHash}
+              </a>
+            </div>
+          ),
+        });
+
+        // Optional download
+        if (downloadChecked) {
+          const url = URL.createObjectURL(watermarkedFile);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = watermarkedFile.name;
+          a.click();
+          URL.revokeObjectURL(url);
+        }
+      } catch (err: any) {
+        toast({
+          title: "Failed",
+          description: err.message || "Unknown error",
+          variant: "destructive",
+        });
+      } finally {
+        setLoading(false);
       }
-
-      const watermarkedFile = new File([watermarked], file.name.replace(/\.[^/.]+$/, "") + "-pog.png", {
-        type: "image/png",
-      });
-
-      // 4. Register on-chain with parentHash support
-      const formData = new FormData();
-      formData.append("file", watermarkedFile);
-      if (parentHash && parentHash.startsWith("0x") && parentHash.length === 66) {
-        formData.append("parentHash", parentHash);
-      }
-
-      const res = await fetch("/api/register", {
-        method: "POST",
-        body: formData,
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Registration failed");
-
-      toast({
-        title: "Success! Registered on Base",
-        description: (
-          <div className="space-y-2">
-            <p>Gas paid by sponsor — proof is forever</p>
-            <a
-              href={data.explorer}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-blue-400 underline text-xs font-mono"
-            >
-              {data.txHash.slice(0, 10)}...{data.txHash.slice(-8)}
-            </a>
-          </div>
-        ),
-      });
-
-      // Optional download
-      if (downloadChecked) {
-        const url = URL.createObjectURL(watermarkedFile);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = watermarkedFile.name;
-        a.click();
-        URL.revokeObjectURL(url);
-      }
-
-    } catch (error: any) {
-      toast({
-        title: "Failed",
-        description: error.message || "Something went wrong",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  }, [downloadChecked, parentHash, toast]);
+    },
+    [downloadChecked, parentHash, toast]
+  );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -144,9 +158,35 @@ export default function SubmitTab() {
       {loading && (
         <div className="flex items-center justify-center gap-3">
           <Loader2 className="h-5 w-5 animate-spin" />
-          <span>Registering on Base...</span>
+          <span>Registering on Base…</span>
         </div>
       )}
 
       <div className="space-y-4">
-        <div className="
+        <div className="flex items-center space-x-2">
+          <Checkbox
+            id="download"
+            checked={downloadChecked}
+            onCheckedChange={(c) => setDownloadChecked(c as boolean)}
+          />
+          <Label htmlFor="download">Download watermarked copy</Label>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="parent">Parent contentHash (for edits — optional)</Label>
+          <input
+            id="parent"
+            type="text"
+            placeholder="0x0000000000000000000000000000000000000000000000000000000000000000"
+            value={parentHash}
+            onChange={(e) => setParentHash(e.target.value)}
+            className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-md text-sm font-mono"
+          />
+          <p className="text-xs text-gray-400">
+            Paste the contentHash from a previous version to prove this is an edit
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
