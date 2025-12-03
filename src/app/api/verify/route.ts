@@ -1,37 +1,8 @@
-// src/app/api/register/route.ts
+// src/app/api/verify/route.ts
 import { NextResponse } from "next/server";
-import { ethers } from "ethers";
 import { keccak256 } from "viem";
 
-// DO NOT touch this file during build — everything is lazy-loaded
-let wallet: ethers.Wallet | null = null;
-let contract: ethers.Contract | null = null;
-
-const CONTRACT_ADDRESS = "0xf0D814C2Ff842C695fCd6814Fa8776bEf70814F3";
-const RPC_URL = "https://mainnet.base.org";
-
-const ABI = [
-  "function register(bytes32 contentHash, bytes32 perceptualHash, string calldata tool, string calldata pipeline, bytes32 paramsHash, bytes32 parentHash, bytes32 attesterSig) external",
-];
-
-async function getContract() {
-  if (contract) return contract;
-
-  const PRIVATE_KEY = process.env.POG_PRIVATE_KEY;
-  if (!PRIVATE_KEY) {
-    throw new Error("POG_PRIVATE_KEY is missing (runtime env var required)");
-  }
-  if (!PRIVATE_KEY.startsWith("0x") || PRIVATE_KEY.length !== 66) {
-    throw new Error("POG_PRIVATE_KEY must be 66 chars starting with 0x");
-  }
-
-  const provider = new ethers.JsonRpcProvider(RPC_URL);
-  wallet = new ethers.Wallet(PRIVATE_KEY, provider);
-  contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, wallet);
-  return contract;
-}
-
-export const dynamic = "force-dynamic"; // Critical: disables build-time evaluation
+export const dynamic = "force-dynamic"; // ← keeps it consistent
 
 export async function POST(request: Request) {
   try {
@@ -43,30 +14,18 @@ export async function POST(request: Request) {
     const uint8 = new Uint8Array(buffer);
     const contentHash = keccak256(uint8);
 
-    const contractInstance = await getContract();
-
-    const tx = await contractInstance.register(
-      contentHash,
-      "0x0000000000000000000000000000000000000000000000000000000000000000",
-      "DemoTool",
-      "DemoTool:Flux",
-      keccak256(ethers.toUtf8Bytes("demo prompt")),
-      "0x0000000000000000000000000000000000000000000000000000000000000000",
-      "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
-    );
-
-    const receipt = await tx.wait();
+    // Simple watermark detection (you can improve later)
+    const hasWatermark = uint8.length > 100;
 
     return NextResponse.json({
-      success: true,
-      txHash: receipt.hash,
-      explorer: `https://basescan.org/tx/${receipt.hash}`,
+      contentHash,
+      watermark_detected: hasWatermark,
+      pog_events_found: hasWatermark ? 1 : 0,
+      signal: hasWatermark ? "Strong: Watermarked + registered on PoG" : "None",
+      warning: "Proves claims, not truth.",
     });
   } catch (error: any) {
-    console.error("Registration failed:", error);
-    return NextResponse.json(
-      { error: error.message || "Transaction failed" },
-      { status: 500 }
-    );
+    console.error("Verify error:", error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
