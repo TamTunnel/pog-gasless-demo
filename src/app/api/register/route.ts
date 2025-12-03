@@ -48,4 +48,18 @@ export async function POST(request: Request) {
       "DemoTool:Flux",
       keccak256(ethers.toUtf8Bytes("demo prompt")),
       "0x0000000000000000000000000000000000000000000000000000000000000000",
-      "0x"   // ← empty bytes = valid for att
+      "0x"   // ← empty bytes for attesterSig (valid!)
+    );
+
+    const receipt = await tx.wait();
+
+    return NextResponse.json({
+      success: true,
+      txHash: receipt.hash,
+      explorer: `https://basescan.org/tx/${receipt.hash}`,
+    });
+  } catch (error: any) {
+    console.error("Register failed:", error);
+    return NextResponse.json({ error: error.message || "Failed" }, { status: 500 });
+  }
+}
