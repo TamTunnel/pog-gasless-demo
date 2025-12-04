@@ -29,24 +29,26 @@ export async function POST(request: Request) {
     const buffer = await file.arrayBuffer();
     const uint8 = new Uint8Array(buffer);
 
+    // 1. Check for the invisible watermark
     const last32 = uint8.slice(-32);
     const hasWatermark =
       last32.length === 32 && Array.from(last32).every((b) => (b & 1) === 1);
 
-    const originalUint8 = new Uint8Array(uint8);
-    if (hasWatermark) {
-      const startIdx = Math.max(0, originalUint8.length - 32);
-      for (let i = startIdx; i < originalUint8.length; i++) {
-        originalUint8[i] = originalUint8[i] & 0xfe; // Set LSB to 0
-      }
+    // 2. Calculate the canonical contentHash
+    // To ensure the hash is consistent, we must ALWAYS zero out the LSB
+    // of the last 32 bytes, regardless of whether a watermark is present.
+    // This creates a "normalized" hash.
+    const normalizedUint8 = new Uint8Array(uint8);
+    const startIdx = Math.max(0, normalizedUint8.length - 32);
+    for (let i = startIdx; i < normalizedUint8.length; i++) {
+      normalizedUint8[i] = normalizedUint8[i] & 0xfe; // Set LSB to 0
     }
-    const contentHash = keccak256(originalUint8);
+    const contentHash = keccak256(normalizedUint8);
 
+    // 3. Find the on-chain registration event
     let onChainProof: any = null;
     try {
-      // Get the latest block number to define a recent search window
       const latestBlock = await publicClient.getBlockNumber();
-      // Search the last 99,999 blocks to avoid RPC errors
       const fromBlock = latestBlock > 99999n ? latestBlock - 99999n : 0n;
 
       const logs = await publicClient.getLogs({
@@ -55,7 +57,7 @@ export async function POST(request: Request) {
         args: {
           contentHash: contentHash as `0x${string}`,
         },
-        fromBlock: fromBlock, // Use the calculated recent block
+        fromBlock: fromBlock,
         toBlock: "latest",
       });
 

@@ -36,7 +36,15 @@ export async function POST(request: Request) {
 
     const buffer = await file.arrayBuffer();
     const uint8 = new Uint8Array(buffer);
-    const contentHash = keccak256(uint8);
+
+    // Calculate the canonical contentHash by zeroing out the LSB of the last 32 bytes.
+    // This ensures the hash is consistent whether a watermark is present or not.
+    const normalizedUint8 = new Uint8Array(uint8);
+    const startIdx = Math.max(0, normalizedUint8.length - 32);
+    for (let i = startIdx; i < normalizedUint8.length; i++) {
+        normalizedUint8[i] = normalizedUint8[i] & 0xfe; // Set LSB to 0
+    }
+    const contentHash = keccak256(normalizedUint8);
 
     const c = await getContract();
 
