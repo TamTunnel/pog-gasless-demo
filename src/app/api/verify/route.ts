@@ -1,7 +1,7 @@
 // src/app/api/verify/route.ts
 import { NextResponse } from "next/server";
 import { keccak256, createPublicClient, http, parseAbiItem } from "viem";
-import { baseSepolia } from "viem/chains";
+import { base } from "viem/chains"; // Corrected: Import 'base' for Mainnet
 
 export const dynamic = "force-dynamic";
 
@@ -11,8 +11,9 @@ const pogAbi = [
   ),
 ];
 
+// Corrected: Point the public client to Base Mainnet
 const publicClient = createPublicClient({
-  chain: baseSepolia,
+  chain: base, 
   transport: http(),
 });
 
@@ -29,15 +30,10 @@ export async function POST(request: Request) {
     const buffer = await file.arrayBuffer();
     const uint8 = new Uint8Array(buffer);
 
-    // 1. Check for the invisible watermark
     const last32 = uint8.slice(-32);
     const hasWatermark =
       last32.length === 32 && Array.from(last32).every((b) => (b & 1) === 1);
 
-    // 2. Calculate the canonical contentHash
-    // To ensure the hash is consistent, we must ALWAYS zero out the LSB
-    // of the last 32 bytes, regardless of whether a watermark is present.
-    // This creates a "normalized" hash.
     const normalizedUint8 = new Uint8Array(uint8);
     const startIdx = Math.max(0, normalizedUint8.length - 32);
     for (let i = startIdx; i < normalizedUint8.length; i++) {
@@ -45,7 +41,6 @@ export async function POST(request: Request) {
     }
     const contentHash = keccak256(normalizedUint8);
 
-    // 3. Find the on-chain registration event
     let onChainProof: any = null;
     try {
       const latestBlock = await publicClient.getBlockNumber();
