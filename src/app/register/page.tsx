@@ -160,7 +160,7 @@ export default function RegisterTab() {
                             <AlertTitle>Success!</AlertTitle>
                             <AlertDescription>
                                 Your image is now securely registered.
-                            </Aler tDescription>
+                            </AlertDescription>
                         </Alert>
 
                         <div className="flex flex-col sm:flex-row gap-4">
