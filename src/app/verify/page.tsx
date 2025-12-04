@@ -74,37 +74,19 @@ export default function VerifyTab() {
     formData.append('file', file);
 
     try {
-      // Step 1: Calculate the canonical content hash on the server
-      const hashResponse = await fetch('/api/calculate-hash', {
+      // Reverted to a single, direct API call to the self-contained verify endpoint
+      const response = await fetch('/api/verify', {
         method: 'POST',
         body: formData,
       });
-      const hashData = await hashResponse.json();
-      if (!hashResponse.ok) throw new Error(hashData.error || 'Failed to calculate hash');
-      const { contentHash } = hashData;
 
-      // Also check for the watermark locally
-      const buffer = await file.arrayBuffer();
-      const uint8 = new Uint8Array(buffer);
-      const last32 = uint8.slice(-32);
-      const watermarkDetected = last32.length === 32 && Array.from(last32).every((b) => (b & 1) === 1);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Verification failed');
 
-      // Step 2: Call the verify API with the canonical hash
-      const verifyResponse = await fetch('/api/verify', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ contentHash, watermarkDetected }),
-      });
-
-      const verifyData = await verifyResponse.json();
-      if (!verifyResponse.ok) throw new Error(verifyData.error || 'Verification failed');
-
-      setResult(verifyData);
+      setResult(data);
       toast({
         title: "Verification Complete",
-        description: verifyData.signal,
+        description: data.signal,
       });
     } catch (error: any) {
       console.error(error);
