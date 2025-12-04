@@ -1,6 +1,6 @@
 // src/app/api/verify/route.ts
 import { NextResponse } from "next/server";
-import { createPublicClient, http, parseAbiItem } from "viem";
+import { keccak256, createPublicClient, http, parseAbiItem } from "viem";
 import { base } from "viem/chains";
 
 export const dynamic = "force-dynamic";
@@ -24,12 +24,29 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Missing ANKR_API_KEY environment variable." }, { status: 500 });
   }
   try {
-    const { contentHash, watermarkDetected: hasWatermark } = await request.json();
-
-    if (!contentHash) {
-      return NextResponse.json({ error: "contentHash is required" }, { status: 400 });
+    const formData = await request.formData();
+    const file = formData.get("file") as File;
+    if (!file) {
+      return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
     }
 
+    const buffer = await file.arrayBuffer();
+    const uint8 = new Uint8Array(buffer);
+
+    // 1. Check for the watermark on the uploaded file
+    const last32 = uint8.slice(-32);
+    const hasWatermark =
+      last32.length === 32 && Array.from(last32).every((b) => (b & 1) === 1);
+
+    // 2. Calculate the canonical contentHash by normalizing the file data
+    const normalizedUint8 = new Uint8Array(uint8);
+    const startIdx = Math.max(0, normalizedUint8.length - 32);
+    for (let i = startIdx; i < normalizedUint8.length; i++) {
+      normalizedUint8[i] = normalizedUint8[i] & 0xfe; // Set LSB to 0
+    }
+    const contentHash = keccak256(normalizedUint8);
+
+    // 3. Search the blockchain for the canonical hash
     let onChainProof: any = null;
     try {
       const latestBlock = await publicClient.getBlockNumber();
@@ -39,6 +56,7 @@ export async function POST(request: Request) {
         address: POG_REGISTRY_ADDRESS,
         event: pogAbi[0],
         args: {
+          // Apply the critical fix: cast the hash to a hex literal
           contentHash: contentHash as `0x${string}`,
         },
         fromBlock: fromBlock,
@@ -58,9 +76,10 @@ export async function POST(request: Request) {
         };
       }
     } catch (e) {
-      console.error("On-chain verification error:", e);
+      console.error("On-chain verification getLogs error:", e);
     }
 
+    // 4. Construct the final signal
     let signal = "Weak: No watermark detected";
     if (hasWatermark && onChainProof) {
       signal = "Strong: Watermark + on-chain PoG proof";
