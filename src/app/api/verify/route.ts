@@ -20,7 +20,7 @@ async function getContract() {
 }
 
 export async function POST(request: Request) {
-    console.log("--- RUNNING LATEST VERIFY API ROUTE ---"); // Diagnostic message
+    console.log("--- RUNNING LATEST VERIFY API ROUTE (v.WatermarkedHash) ---"); 
     if (!process.env.ANKR_API_KEY) {
         return NextResponse.json({ error: "Missing ANKR_API_KEY environment variable." }, { status: 500 });
     }
@@ -34,20 +34,16 @@ export async function POST(request: Request) {
         const buffer = await file.arrayBuffer();
         const uint8 = new Uint8Array(buffer);
 
-        // 1. Check for the watermark on the uploaded file
+        // 1. Calculate the content hash directly from the uploaded file bytes.
+        // We expect the uploaded file to be the watermarked one.
+        const contentHash = keccak256(uint8);
+
+        // 2. Check for the watermark signal within the uploaded file.
         const last32 = uint8.slice(-32);
         const hasWatermark =
             last32.length === 32 && Array.from(last32).every((b) => (b & 1) === 1);
 
-        // 2. Calculate the canonical content hash by removing the watermark
-        const normalizedUint8 = new Uint8Array(uint8);
-        const normalizeStartIdx = Math.max(0, normalizedUint8.length - 32);
-        for (let i = normalizeStartIdx; i < normalizedUint8.length; i++) {
-            normalizedUint8[i] = normalizedUint8[i] & 0xfe; // remove LSB watermark
-        }
-        const contentHash = keccak256(normalizedUint8);
-
-        // 3. Check for the content hash on-chain
+        // 3. Check for the content hash on-chain.
         let onChainProof: any = null;
         try {
             const c = await getContract();
@@ -64,7 +60,7 @@ export async function POST(request: Request) {
             }
         } catch (e) {
             console.error("On-chain lookup failed:", e);
-            // This is not a fatal error, just means no proof was found.
+            // Not a fatal error, just means no proof was found.
         }
 
         let signal = "No AI watermark detected";
@@ -73,7 +69,10 @@ export async function POST(request: Request) {
         } else if (hasWatermark && !onChainProof) {
             signal = "Medium: Watermarked AI, but no on-chain registration found";
         } else if (!hasWatermark && onChainProof) {
-            signal = "Medium: On-chain registration found, but image is not watermarked";
+            // This case should be rare, implying the watermark was stripped.
+            signal = "Weak: On-chain registration found, but image is not watermarked";
+        } else { // !hasWatermark && !onChainProof
+             signal = "None: No on-chain registration found and no watermark detected.";
         }
 
         return NextResponse.json({

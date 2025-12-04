@@ -41,7 +41,7 @@ function arrayBufferToBase64(buffer: ArrayBuffer) {
 }
 
 export async function POST(request: Request) {
-    console.log("--- RUNNING LATEST API ROUTE (v.Base64) ---");
+    console.log("--- RUNNING LATEST API ROUTE (v.WatermarkedHash) ---");
     try {
         const formData = await request.formData();
         const file = formData.get("file") as File;
@@ -54,39 +54,36 @@ export async function POST(request: Request) {
         const buffer = await file.arrayBuffer();
         const originalUint8 = new Uint8Array(buffer);
 
-        // Apply watermark
+        // 1. Apply watermark to create the final image data.
         const watermarkedUint8 = new Uint8Array(originalUint8);
         const watermarkStartIdx = Math.max(0, watermarkedUint8.length - 32);
         for (let i = watermarkStartIdx; i < watermarkedUint8.length; i++) {
-            watermarkedUint8[i] = watermarkedUint8[i] | 1;
+            watermarkedUint8[i] = watermarkedUint8[i] | 1; // Set LSB to 1
         }
 
-        // Calculate canonical hash
-        const normalizedUint8 = new Uint8Array(watermarkedUint8);
-        const normalizeStartIdx = Math.max(0, normalizedUint8.length - 32);
-        for (let i = normalizeStartIdx; i < normalizedUint8.length; i++) {
-            normalizedUint8[i] = normalizedUint8[i] & 0xfe;
-        }
-        const contentHash = keccak256(normalizedUint8);
+        // 2. Calculate the content hash from the WATERMARKED data.
+        const contentHash = keccak256(watermarkedUint8);
 
-        // Register on-chain
+        // 3. Register the watermarked content hash on-chain.
         const c = await getContract();
         const tx = await c.register(
-            contentHash, "0x0000000000000000000000000000000000000000000000000000000000000000",
-            "pog.lzzo.net", "pog.lzzo.net gasless demo", "0x0000000000000000000000000000000000000000000000000000000000000000",
+            contentHash,
+            "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "pog.lzzo.net",
+            "pog.lzzo.net gasless demo",
+            "0x0000000000000000000000000000000000000000000000000000000000000000",
             parentHash && /^0x[a-fA-F0-9]{64}$/.test(parentHash) ? parentHash : "0x0000000000000000000000000000000000000000000000000000000000000000",
             "0x0000000000000000000000000000000000000000000000000000000000000000"
         );
         const receipt = await tx.wait();
 
-        // Convert watermarked image to Base64
+        // 4. Convert the watermarked image to Base64 to be sent to the client.
         const watermarkedImageBase64 = arrayBufferToBase64(watermarkedUint8.buffer);
 
-        // Return a JSON response with all the data
         return NextResponse.json({
             success: true,
             txHash: receipt.hash,
-            contentHash: contentHash,
+            contentHash: contentHash, // The hash of the watermarked data
             explorerUrl: `https://basescan.org/tx/${receipt.hash}`,
             watermarkedImageBase64: watermarkedImageBase64,
             imageFormat: file.type,
