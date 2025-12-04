@@ -6,7 +6,8 @@ import { keccak256 } from "viem";
 export const dynamic = "force-dynamic";
 
 const CONTRACT_ADDRESS = "0xf0D814C2Ff842C695fCd6814Fa8776bEf70814F3";
-const RPC_URL = "https://mainnet.base.org";
+// Switched to a more reliable public RPC provider (Ankr)
+const RPC_URL = "https://rpc.ankr.com/base";
 
 const ABI = [
   "function register(bytes32 contentHash, bytes32 perceptualHash, string tool, string pipeline, bytes32 paramsHash, bytes32 parentHash, bytes32 attesterSig) external",

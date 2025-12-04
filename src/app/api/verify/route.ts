@@ -1,7 +1,7 @@
 // src/app/api/verify/route.ts
 import { NextResponse } from "next/server";
 import { keccak256, createPublicClient, http, parseAbiItem } from "viem";
-import { base } from "viem/chains"; // Corrected: Import 'base' for Mainnet
+import { base } from "viem/chains";
 
 export const dynamic = "force-dynamic";
 
@@ -11,10 +11,10 @@ const pogAbi = [
   ),
 ];
 
-// Corrected: Point the public client to Base Mainnet
+// Switched to a more reliable public RPC provider (Ankr)
 const publicClient = createPublicClient({
-  chain: base, 
-  transport: http(),
+  chain: base,
+  transport: http("https://rpc.ankr.com/base"),
 });
 
 const POG_REGISTRY_ADDRESS = "0xf0D814C2Ff842C695fCd6814Fa8776bEf70814F3";
