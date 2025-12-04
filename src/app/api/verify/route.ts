@@ -11,16 +11,18 @@ const ABI = [
     "function registrations(bytes32) view returns (address, uint256, string, string, bytes32, bytes32, bytes32)"
 ];
 
-let contract: ethers.Contract | null = null;
+// Creates a new contract instance for reading.
 async function getContract() {
-    if (contract) return contract;
-    const provider = new ethers.JsonRpcProvider(RPC_URL);
-    contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, provider);
-    return contract;
+    if (!process.env.ANKR_API_KEY) {
+        throw new Error("Missing ANKR_API_KEY environment variable.");
+    }
+    // Explicitly connect to the Base network for robustness.
+    const provider = new ethers.JsonRpcProvider(RPC_URL, 'base');
+    return new ethers.Contract(CONTRACT_ADDRESS, ABI, provider);
 }
 
 export async function POST(request: Request) {
-    console.log("--- RUNNING LATEST VERIFY API ROUTE (v.WatermarkedHash) ---"); 
+    console.log("--- RUNNING LATEST VERIFY API ROUTE (v.WatermarkedHash-Stable) ---"); 
     if (!process.env.ANKR_API_KEY) {
         return NextResponse.json({ error: "Missing ANKR_API_KEY environment variable." }, { status: 500 });
     }

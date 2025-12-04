@@ -12,10 +12,8 @@ const ABI = [
     "function register(bytes32 contentHash, bytes32 perceptualHash, string tool, string pipeline, bytes32 paramsHash, bytes32 parentHash, bytes32 attesterSig) external",
 ];
 
-let contract: ethers.Contract | null = null;
-
+// Creates a new contract instance for writing.
 async function getContract() {
-    if (contract) return contract;
     if (!process.env.ANKR_API_KEY) {
         throw new Error("Missing ANKR_API_KEY environment variable.");
     }
@@ -23,10 +21,10 @@ async function getContract() {
     if (!pk || !pk.startsWith("0x") || pk.length !== 66) {
         throw new Error("Invalid or missing POG_PRIVATE_KEY");
     }
-    const provider = new ethers.JsonRpcProvider(RPC_URL);
+    // Explicitly connect to the Base network for robustness.
+    const provider = new ethers.JsonRpcProvider(RPC_URL, 'base');
     const wallet = new ethers.Wallet(pk, provider);
-    contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, wallet);
-    return contract;
+    return new ethers.Contract(CONTRACT_ADDRESS, ABI, wallet);
 }
 
 // Helper to convert ArrayBuffer to Base64
@@ -41,7 +39,7 @@ function arrayBufferToBase64(buffer: ArrayBuffer) {
 }
 
 export async function POST(request: Request) {
-    console.log("--- RUNNING LATEST API ROUTE (v.WatermarkedHash) ---");
+    console.log("--- RUNNING LATEST API ROUTE (v.WatermarkedHash-Stable) ---");
     try {
         const formData = await request.formData();
         const file = formData.get("file") as File;
