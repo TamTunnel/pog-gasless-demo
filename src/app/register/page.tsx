@@ -16,6 +16,17 @@ interface SuccessState {
     fileName: string;
 }
 
+// Helper to convert Base64 to an ArrayBuffer
+function base64ToArrayBuffer(base64: string) {
+    const binary_string = atob(base64);
+    const len = binary_string.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+        bytes[i] = binary_string.charCodeAt(i);
+    }
+    return bytes.buffer;
+}
+
 export default function RegisterTab() {
     const [file, setFile] = useState<File | null>(null);
     const [loading, setLoading] = useState(false);
@@ -26,7 +37,7 @@ export default function RegisterTab() {
     const onDrop = useCallback((acceptedFiles: File[]) => {
         if (acceptedFiles.length > 0) {
             setFile(acceptedFiles[0]);
-            setSuccess(null); // Reset on new file
+            setSuccess(null);
             setError(null);
         }
     }, []);
@@ -53,45 +64,42 @@ export default function RegisterTab() {
                 body: formData,
             });
 
-            if (!response.ok) {
-                let errorMessage;
-                try {
-                    // Clone the response so we can read it twice
-                    const errorResponse = response.clone();
-                    const errorData = await errorResponse.json();
-                    errorMessage = errorData.error || `API Error: ${response.status}`;
-                } catch (e) {
-                    // If parsing JSON fails, read the response as text
-                    errorMessage = await response.text();
-                }
-                throw new Error(errorMessage);
+            const data = await response.json();
+
+            if (!data.success) {
+                throw new Error(data.error || "An unknown API error occurred.");
             }
             
-            const watermarkedImageData = await response.arrayBuffer();
-            const txHash = response.headers.get('x-tx-hash');
-            const explorerUrl = response.headers.get('x-explorer-url');
-            const contentHash = response.headers.get('x-content-hash');
-
-            if (!txHash || !explorerUrl || !contentHash) {
-                throw new Error("Missing critical transaction data in response headers.");
-            }
-
-            const blob = new Blob([watermarkedImageData], { type: file.type });
+            const watermarkedImageData = base64ToArrayBuffer(data.watermarkedImageBase64);
+            
+            const blob = new Blob([watermarkedImageData], { type: data.imageFormat });
             const downloadUrl = URL.createObjectURL(blob);
             const fileName = `watermarked_${file.name}`;
 
-            setSuccess({ txHash, explorerUrl, contentHash, downloadUrl, fileName });
+            setSuccess({
+                txHash: data.txHash,
+                explorerUrl: data.explorerUrl,
+                contentHash: data.contentHash,
+                downloadUrl,
+                fileName,
+            });
+
             toast({
                 title: "Registration Successful",
                 description: "Your image has been watermarked and registered on-chain.",
             });
 
         } catch (err: any) {
-            console.error(err);
-            setError(err.message || "An unknown error occurred.");
+            console.error("Full error object:", err);
+            let errorMessage = err.message || "An unknown error occurred.";
+            // Handle cases where the error is not a simple message, e.g. network error
+            if (err instanceof TypeError && err.message === "Failed to fetch") {
+                errorMessage = "Network error: Failed to connect to the server.";
+            }
+            setError(errorMessage);
             toast({
                 title: "Registration Failed",
-                description: err.message,
+                description: errorMessage,
                 variant: "destructive",
             });
         } finally {
