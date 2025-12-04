@@ -47,12 +47,6 @@ function VerificationDetails({ proof }: { proof: any }) {
                     </div>
                 </div>
             </div>
-            <div className="flex items-start gap-3 mt-4 pt-4 border-t border-gray-700/50">
-                <Info className="h-4 w-4 text-gray-500 mt-1 flex-shrink-0" />
-                <p className="text-xs text-gray-500">
-                    <strong>Note:</strong> For performance, this verifier automatically checks for proofs within recent blocks (approx. the last 48 hours). If an on-chain proof is not found for an older image, you may need to search for its content hash directly on a block explorer.
-                </p>
-            </div>
         </div>
     );
 }
@@ -80,18 +74,37 @@ export default function VerifyTab() {
     formData.append('file', file);
 
     try {
-      const response = await fetch('/api/verify', {
+      // Step 1: Calculate the canonical content hash on the server
+      const hashResponse = await fetch('/api/calculate-hash', {
         method: 'POST',
         body: formData,
       });
+      const hashData = await hashResponse.json();
+      if (!hashResponse.ok) throw new Error(hashData.error || 'Failed to calculate hash');
+      const { contentHash } = hashData;
 
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Verification failed');
+      // Also check for the watermark locally
+      const buffer = await file.arrayBuffer();
+      const uint8 = new Uint8Array(buffer);
+      const last32 = uint8.slice(-32);
+      const watermarkDetected = last32.length === 32 && Array.from(last32).every((b) => (b & 1) === 1);
 
-      setResult(data);
+      // Step 2: Call the verify API with the canonical hash
+      const verifyResponse = await fetch('/api/verify', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ contentHash, watermarkDetected }),
+      });
+
+      const verifyData = await verifyResponse.json();
+      if (!verifyResponse.ok) throw new Error(verifyData.error || 'Verification failed');
+
+      setResult(verifyData);
       toast({
         title: "Verification Complete",
-        description: data.signal,
+        description: verifyData.signal,
       });
     } catch (error: any) {
       console.error(error);
@@ -160,12 +173,11 @@ export default function VerifyTab() {
 
             {result.onChainProof && <VerificationDetails proof={result.onChainProof} />}
 
-            {/* Show note when watermark is found but proof is not */}
             {result.watermark_detected && !result.onChainProof && (
                 <div className="flex items-start gap-3 mt-4 pt-4 ">
                     <Info className="h-4 w-4 text-gray-500 mt-1 flex-shrink-0" />
                     <p className="text-xs text-gray-500">
-                        <strong>Note:</strong> An on-chain proof was not found in recent blocks (approx. last 48 hours). For older registrations, you may need to search for the image's content hash directly on a block explorer.
+                        <strong>Note:</strong> An on-chain proof was not found in recent blocks (approx. the last hour). For older registrations, you may need to search for the image's content hash directly on a block explorer.
                     </p>
                 </div>
             )}

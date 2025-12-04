@@ -1,6 +1,6 @@
 // src/app/api/verify/route.ts
 import { NextResponse } from "next/server";
-import { keccak256, createPublicClient, http, parseAbiItem } from "viem";
+import { createPublicClient, http, parseAbiItem } from "viem";
 import { base } from "viem/chains";
 
 export const dynamic = "force-dynamic";
@@ -24,30 +24,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Missing ANKR_API_KEY environment variable." }, { status: 500 });
   }
   try {
-    const formData = await request.formData();
-    const file = formData.get("file") as File;
-    if (!file) {
-      return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
+    const { contentHash, watermarkDetected: hasWatermark } = await request.json();
+
+    if (!contentHash) {
+      return NextResponse.json({ error: "contentHash is required" }, { status: 400 });
     }
-
-    const buffer = await file.arrayBuffer();
-    const uint8 = new Uint8Array(buffer);
-
-    const last32 = uint8.slice(-32);
-    const hasWatermark =
-      last32.length === 32 && Array.from(last32).every((b) => (b & 1) === 1);
-
-    const normalizedUint8 = new Uint8Array(uint8);
-    const startIdx = Math.max(0, normalizedUint8.length - 32);
-    for (let i = startIdx; i < normalizedUint8.length; i++) {
-      normalizedUint8[i] = normalizedUint8[i] & 0xfe; // Set LSB to 0
-    }
-    const contentHash = keccak256(normalizedUint8);
 
     let onChainProof: any = null;
     try {
       const latestBlock = await publicClient.getBlockNumber();
-      // Reduced block range to 2500 to avoid RPC errors
       const fromBlock = latestBlock > 2500n ? latestBlock - 2500n : 0n;
 
       const logs = await publicClient.getLogs({
