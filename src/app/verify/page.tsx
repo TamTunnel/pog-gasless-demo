@@ -4,11 +4,9 @@ import { useCallback, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { Card, CardContent } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Search, CheckCircle, Loader2, ExternalLink, Hash, Bot, Fingerprint, Calendar } from "lucide-react";
+import { Search, CheckCircle, Loader2, Hash, Bot, Fingerprint, Calendar, Info } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
-import { Button } from "@/components/ui/button";
 
-// New component for displaying the detailed verification results
 function VerificationDetails({ proof }: { proof: any }) {
     if (!proof) return null;
     
@@ -48,6 +46,12 @@ function VerificationDetails({ proof }: { proof: any }) {
                         </a>
                     </div>
                 </div>
+            </div>
+            <div className="flex items-start gap-3 mt-4 pt-4 border-t border-gray-700/50">
+                <Info className="h-4 w-4 text-gray-500 mt-1 flex-shrink-0" />
+                <p className="text-xs text-gray-500">
+                    <strong>Note:</strong> For performance, this verifier automatically checks for proofs within recent blocks (approx. the last 48 hours). If an on-chain proof is not found for an older image, you may need to search for its content hash directly on a block explorer.
+                </p>
             </div>
         </div>
     );
@@ -154,8 +158,17 @@ export default function VerifyTab() {
               </AlertDescription>
             </Alert>
 
-            {/* Render the new details component if proof is found */}
             {result.onChainProof && <VerificationDetails proof={result.onChainProof} />}
+
+            {/* Show note when watermark is found but proof is not */}
+            {result.watermark_detected && !result.onChainProof && (
+                <div className="flex items-start gap-3 mt-4 pt-4 ">
+                    <Info className="h-4 w-4 text-gray-500 mt-1 flex-shrink-0" />
+                    <p className="text-xs text-gray-500">
+                        <strong>Note:</strong> An on-chain proof was not found in recent blocks (approx. last 48 hours). For older registrations, you may need to search for the image's content hash directly on a block explorer.
+                    </p>
+                </div>
+            )}
 
           </div>
         )}
