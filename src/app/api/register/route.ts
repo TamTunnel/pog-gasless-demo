@@ -7,7 +7,6 @@ export const dynamic = "force-dynamic";
 
 const CONTRACT_ADDRESS = "0xf0D814C2Ff842C695fCd6814Fa8776bEf70814F3";
 const RPC_URL = `https://rpc.ankr.com/base/${process.env.ANKR_API_KEY}`;
-const WATERMARK_API_URL = process.env.WATERMARK_API_URL || "";
 
 const ABI = [
     "function register(bytes32 contentHash, bytes32 perceptualHash, string tool, string pipeline, bytes32 paramsHash, bytes32 parentHash, bytes32 attesterSig) external",
@@ -32,38 +31,29 @@ async function getContract() {
 
 export async function POST(request: Request) {
     try {
-        if (!WATERMARK_API_URL) {
-            throw new Error("Missing WATERMARK_API_URL environment variable");
-        }
-
         const formData = await request.formData();
         const file = formData.get("file") as File;
         const parentHash = formData.get("parentHash") as string | null;
 
         if (!file) return NextResponse.json({ error: "No file" }, { status: 400 });
 
-        // Step 1: Watermark the image first.
-        const watermarkFormData = new FormData();
-        watermarkFormData.append("file", file);
+        const buffer = await file.arrayBuffer();
+        const originalUint8 = new Uint8Array(buffer);
 
-        const watermarkResponse = await fetch(WATERMARK_API_URL, {
-            method: "POST",
-            body: watermarkFormData,
-        });
-
-        if (!watermarkResponse.ok) {
-            const errorBody = await watermarkResponse.text();
-            console.error("Watermark API Error:", errorBody);
-            throw new Error(`Watermarking failed: ${watermarkResponse.statusText}`);
+        // Step 1: Apply the watermark directly to the image data.
+        // The watermark is applied by setting the least significant bit (LSB) of the last 32 bytes to 1.
+        const watermarkedUint8 = new Uint8Array(originalUint8);
+        const watermarkStartIdx = Math.max(0, watermarkedUint8.length - 32);
+        for (let i = watermarkStartIdx; i < watermarkedUint8.length; i++) {
+            watermarkedUint8[i] = watermarkedUint8[i] | 1; // Set LSB to 1
         }
 
-        const watermarkedBuffer = await watermarkResponse.arrayBuffer();
-        const watermarkedUint8 = new Uint8Array(watermarkedBuffer);
-
         // Step 2: Calculate the canonical contentHash from the *watermarked* data.
+        // The canonical hash is calculated after zeroing out the LSB, making it verifiable 
+        // whether the image has a watermark or not.
         const normalizedUint8 = new Uint8Array(watermarkedUint8);
-        const startIdx = Math.max(0, normalizedUint8.length - 32);
-        for (let i = startIdx; i < normalizedUint8.length; i++) {
+        const normalizeStartIdx = Math.max(0, normalizedUint8.length - 32);
+        for (let i = normalizeStartIdx; i < normalizedUint8.length; i++) {
             normalizedUint8[i] = normalizedUint8[i] & 0xfe; // Set LSB to 0
         }
         const contentHash = keccak256(normalizedUint8);
@@ -91,7 +81,7 @@ export async function POST(request: Request) {
         headers.set("x-content-hash", contentHash);
         headers.set("x-explorer-url", `https://basescan.org/tx/${receipt.hash}`);
 
-        return new NextResponse(watermarkedBuffer, { status: 200, headers });
+        return new NextResponse(watermarkedUint8.buffer, { status: 200, headers });
 
     } catch (error: any) {
         console.error("Register error:", error);
