@@ -4,7 +4,7 @@ import { useCallback, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { Card, CardContent } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Search, CheckCircle, Loader2, Hash, Bot, Fingerprint, Calendar, Info } from "lucide-react";
+import { Search, CheckCircle, Loader2, Hash, Bot, Fingerprint, Calendar, Info, AlertCircle } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 
 function VerificationDetails({ proof }: { proof: any }) {
@@ -54,6 +54,7 @@ function VerificationDetails({ proof }: { proof: any }) {
 export default function VerifyTab() {
   const [result, setResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
@@ -70,29 +71,40 @@ export default function VerifyTab() {
 
     setLoading(true);
     setResult(null);
+    setError(null);
     const formData = new FormData();
     formData.append('file', file);
 
     try {
-      // Reverted to a single, direct API call to the self-contained verify endpoint
       const response = await fetch('/api/verify', {
         method: 'POST',
         body: formData,
       });
 
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Verification failed');
+      if (!response.ok) {
+          let errorMessage;
+          try {
+              const errorResponse = response.clone();
+              const errorData = await errorResponse.json();
+              errorMessage = errorData.error || `API Error: ${response.status}`;
+          } catch (e) {
+              errorMessage = await response.text();
+          }
+          throw new Error(errorMessage);
+      }
 
+      const data = await response.json();
       setResult(data);
       toast({
         title: "Verification Complete",
         description: data.signal,
       });
-    } catch (error: any) {
-      console.error(error);
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || "An unknown error occurred.");
       toast({
         title: "Verification Failed",
-        description: error.message || "An unknown error occurred.",
+        description: err.message,
         variant: "destructive",
       });
     } finally {
@@ -139,7 +151,15 @@ export default function VerifyTab() {
           </div>
         )}
 
-        {result && (
+        {error && (
+            <Alert variant="destructive" className="mt-8 bg-red-900/30 border-red-500/50 text-red-200">
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Verification Error</AlertTitle>
+                <AlertDescription>{error}</AlertDescription>
+            </Alert>
+        )}
+
+        {result && !error && (
           <div className="mt-8 space-y-4">
             <Alert className={`${
                 result.signal.startsWith("Strong") ? "border-green-500/50 bg-green-900/30 text-green-200" : 

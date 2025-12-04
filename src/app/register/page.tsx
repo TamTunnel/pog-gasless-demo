@@ -54,15 +54,15 @@ export default function RegisterTab() {
             });
 
             if (!response.ok) {
-                let errorMessage = `Registration failed with status: ${response.status}`;
+                let errorMessage;
                 try {
-                    // Attempt to parse a JSON error response from the server
-                    const errorData = await response.json();
-                    errorMessage = errorData.error || errorMessage;
+                    // Clone the response so we can read it twice
+                    const errorResponse = response.clone();
+                    const errorData = await errorResponse.json();
+                    errorMessage = errorData.error || `API Error: ${response.status}`;
                 } catch (e) {
-                    // This catch block will execute if the error response is not valid JSON (e.g., an image file or HTML error page)
-                    console.error("Could not parse error response as JSON", e);
-                    errorMessage = "An unexpected error occurred on the server.";
+                    // If parsing JSON fails, read the response as text
+                    errorMessage = await response.text();
                 }
                 throw new Error(errorMessage);
             }
@@ -91,7 +91,7 @@ export default function RegisterTab() {
             setError(err.message || "An unknown error occurred.");
             toast({
                 title: "Registration Failed",
-                description: err.message, 
+                description: err.message,
                 variant: "destructive",
             });
         } finally {
