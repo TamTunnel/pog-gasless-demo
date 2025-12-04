@@ -1,101 +1,90 @@
 // src/app/api/verify/route.ts
 import { NextResponse } from "next/server";
-import { keccak256, createPublicClient, http, parseAbiItem } from "viem";
-import { base } from "viem/chains";
+import { ethers } from "ethers";
+import { keccak256 } from "viem";
 
 export const dynamic = "force-dynamic";
 
-const pogAbi = [
-  parseAbiItem(
-    "event Registered(bytes32 indexed contentHash, bytes32 indexed paramsHash, string tool, string model, address indexed creator)"
-  ),
+const CONTRACT_ADDRESS = "0xf0D814C2Ff842C695fCd6814Fa8776bEf70814F3";
+const RPC_URL = `https://rpc.ankr.com/base/${process.env.ANKR_API_KEY}`;
+const ABI = [
+    "function registrations(bytes32) view returns (address, uint256, string, string, bytes32, bytes32, bytes32)"
 ];
 
-// Using Ankr RPC with an API Key
-const publicClient = createPublicClient({
-  chain: base,
-  transport: http(`https://rpc.ankr.com/base/${process.env.ANKR_API_KEY}`),
-});
-
-const POG_REGISTRY_ADDRESS = "0xf0D814C2Ff842C695fCd6814Fa8776bEf70814F3";
+let contract: ethers.Contract | null = null;
+async function getContract() {
+    if (contract) return contract;
+    const provider = new ethers.JsonRpcProvider(RPC_URL);
+    contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, provider);
+    return contract;
+}
 
 export async function POST(request: Request) {
-  if (!process.env.ANKR_API_KEY) {
-    return NextResponse.json({ error: "Missing ANKR_API_KEY environment variable." }, { status: 500 });
-  }
-  try {
-    const formData = await request.formData();
-    const file = formData.get("file") as File;
-    if (!file) {
-      return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
+    console.log("--- RUNNING LATEST VERIFY API ROUTE ---"); // Diagnostic message
+    if (!process.env.ANKR_API_KEY) {
+        return NextResponse.json({ error: "Missing ANKR_API_KEY environment variable." }, { status: 500 });
     }
-
-    const buffer = await file.arrayBuffer();
-    const uint8 = new Uint8Array(buffer);
-
-    // 1. Check for the watermark on the uploaded file
-    const last32 = uint8.slice(-32);
-    const hasWatermark =
-      last32.length === 32 && Array.from(last32).every((b) => (b & 1) === 1);
-
-    // 2. Calculate the canonical contentHash by normalizing the file data
-    const normalizedUint8 = new Uint8Array(uint8);
-    const startIdx = Math.max(0, normalizedUint8.length - 32);
-    for (let i = startIdx; i < normalizedUint8.length; i++) {
-      normalizedUint8[i] = normalizedUint8[i] & 0xfe; // Set LSB to 0
-    }
-    const contentHash = keccak256(normalizedUint8);
-
-    // 3. Search the blockchain for the canonical hash
-    let onChainProof: any = null;
     try {
-      const latestBlock = await publicClient.getBlockNumber();
-      const fromBlock = latestBlock > 2500n ? latestBlock - 2500n : 0n;
+        const formData = await request.formData();
+        const file = formData.get("file") as File;
+        if (!file) {
+            return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
+        }
 
-      const logs = await publicClient.getLogs({
-        address: POG_REGISTRY_ADDRESS,
-        event: pogAbi[0],
-        args: {
-          // Apply the critical fix: cast the hash to a hex literal
-          contentHash: contentHash as `0x${string}`,
-        },
-        fromBlock: fromBlock,
-        toBlock: "latest",
-      });
+        const buffer = await file.arrayBuffer();
+        const uint8 = new Uint8Array(buffer);
 
-      if (logs && logs.length > 0) {
-        const log = logs[0];
-        const block = await publicClient.getBlock({ blockNumber: log.blockNumber });
-        onChainProof = {
-          tool: log.args.tool,
-          model: log.args.model,
-          creator: log.args.creator,
-          txHash: log.transactionHash,
-          timestamp: new Date(Number(block.timestamp) * 1000).toUTCString(),
-          blockNumber: log.blockNumber.toString(),
-        };
-      }
-    } catch (e) {
-      console.error("On-chain verification getLogs error:", e);
+        // 1. Check for the watermark on the uploaded file
+        const last32 = uint8.slice(-32);
+        const hasWatermark =
+            last32.length === 32 && Array.from(last32).every((b) => (b & 1) === 1);
+
+        // 2. Calculate the canonical content hash by removing the watermark
+        const normalizedUint8 = new Uint8Array(uint8);
+        const normalizeStartIdx = Math.max(0, normalizedUint8.length - 32);
+        for (let i = normalizeStartIdx; i < normalizedUint8.length; i++) {
+            normalizedUint8[i] = normalizedUint8[i] & 0xfe; // remove LSB watermark
+        }
+        const contentHash = keccak256(normalizedUint8);
+
+        // 3. Check for the content hash on-chain
+        let onChainProof: any = null;
+        try {
+            const c = await getContract();
+            const registration = await c.registrations(contentHash);
+            const blockNumber = registration[1];
+            if (blockNumber > 0) {
+                onChainProof = {
+                    txHash: "N/A (direct contract state lookup)",
+                    contentHash,
+                    tool: registration[2],
+                    model: registration[3],
+                    timestamp: new Date(Number(blockNumber) * 1000).toISOString(),
+                };
+            }
+        } catch (e) {
+            console.error("On-chain lookup failed:", e);
+            // This is not a fatal error, just means no proof was found.
+        }
+
+        let signal = "No AI watermark detected";
+        if (hasWatermark && onChainProof) {
+            signal = "Strong: Watermarked AI + on-chain registration";
+        } else if (hasWatermark && !onChainProof) {
+            signal = "Medium: Watermarked AI, but no on-chain registration found";
+        } else if (!hasWatermark && onChainProof) {
+            signal = "Medium: On-chain registration found, but image is not watermarked";
+        }
+
+        return NextResponse.json({
+            contentHash,
+            watermark_detected: hasWatermark,
+            onchain_proof_found: !!onChainProof,
+            signal,
+            onChainProof,
+        });
+    } catch (error: any) {
+        console.error("Verify API Error:", error);
+        return NextResponse.json({ error: error.message || "An unknown error occurred" }, { status: 500 });
     }
-
-    // 4. Construct the final signal
-    let signal = "Weak: No watermark detected";
-    if (hasWatermark && onChainProof) {
-      signal = "Strong: Watermark + on-chain PoG proof";
-    } else if (hasWatermark) {
-      signal = "Medium: Watermark found, but no on-chain proof found";
-    }
-
-    return NextResponse.json({
-      contentHash,
-      watermark_detected: hasWatermark,
-      onchain_proof_found: !!onChainProof,
-      signal,
-      onChainProof,
-    });
-  } catch (error: any) {
-    console.error("Verify API Error:", error);
-    return NextResponse.json({ error: error.message || "An unknown error occurred" }, { status: 500 });
-  }
 }
