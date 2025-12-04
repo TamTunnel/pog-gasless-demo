@@ -47,8 +47,8 @@ export async function POST(request: Request) {
     let onChainProof: any = null;
     try {
       const latestBlock = await publicClient.getBlockNumber();
-      // Reduced block range to 10000 to avoid RPC errors
-      const fromBlock = latestBlock > 10000n ? latestBlock - 10000n : 0n;
+      // Reduced block range to 2500 to avoid RPC errors
+      const fromBlock = latestBlock > 2500n ? latestBlock - 2500n : 0n;
 
       const logs = await publicClient.getLogs({
         address: POG_REGISTRY_ADDRESS,
