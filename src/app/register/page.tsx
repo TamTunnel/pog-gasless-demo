@@ -54,21 +54,28 @@ export default function RegisterTab() {
             });
 
             if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || "Registration failed");
+                let errorMessage = `Registration failed with status: ${response.status}`;
+                try {
+                    // Attempt to parse a JSON error response from the server
+                    const errorData = await response.json();
+                    errorMessage = errorData.error || errorMessage;
+                } catch (e) {
+                    // This catch block will execute if the error response is not valid JSON (e.g., an image file or HTML error page)
+                    console.error("Could not parse error response as JSON", e);
+                    errorMessage = "An unexpected error occurred on the server.";
+                }
+                throw new Error(errorMessage);
             }
             
-            // The backend now sends the watermarked image directly
             const watermarkedImageData = await response.arrayBuffer();
             const txHash = response.headers.get('x-tx-hash');
             const explorerUrl = response.headers.get('x-explorer-url');
             const contentHash = response.headers.get('x-content-hash');
 
             if (!txHash || !explorerUrl || !contentHash) {
-                throw new Error("Missing critical transaction data in response.");
+                throw new Error("Missing critical transaction data in response headers.");
             }
 
-            // Create a downloadable link for the watermarked image
             const blob = new Blob([watermarkedImageData], { type: file.type });
             const downloadUrl = URL.createObjectURL(blob);
             const fileName = `watermarked_${file.name}`;
@@ -153,7 +160,7 @@ export default function RegisterTab() {
                             <AlertTitle>Success!</AlertTitle>
                             <AlertDescription>
                                 Your image is now securely registered.
-                            </AlertDescription>
+                            </Aler tDescription>
                         </Alert>
 
                         <div className="flex flex-col sm:flex-row gap-4">
