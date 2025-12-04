@@ -6,26 +6,21 @@ import { keccak256 } from "viem";
 export const dynamic = "force-dynamic";
 
 const CONTRACT_ADDRESS = "0xf0D814C2Ff842C695fCd6814Fa8776bEf70814F3";
-const RPC_URL = `https://rpc.ankr.com/base/${process.env.ANKR_API_KEY}`;
+// DIAGNOSTIC: Using public Base RPC to isolate the issue.
+const RPC_URL = `https://mainnet.base.org`;
 const ABI = [
     "function registrations(bytes32) view returns (address, uint256, string, string, bytes32, bytes32, bytes32)"
 ];
 
 // Creates a new contract instance for reading.
 async function getContract() {
-    if (!process.env.ANKR_API_KEY) {
-        throw new Error("Missing ANKR_API_KEY environment variable.");
-    }
     // Explicitly connect to the Base network for robustness.
     const provider = new ethers.JsonRpcProvider(RPC_URL, 'base');
     return new ethers.Contract(CONTRACT_ADDRESS, ABI, provider);
 }
 
 export async function POST(request: Request) {
-    console.log("--- RUNNING LATEST VERIFY API ROUTE (v.WatermarkedHash-Stable) ---"); 
-    if (!process.env.ANKR_API_KEY) {
-        return NextResponse.json({ error: "Missing ANKR_API_KEY environment variable." }, { status: 500 });
-    }
+    console.log("--- RUNNING LATEST VERIFY API ROUTE (v.PublicRPC-Test) ---"); 
     try {
         const formData = await request.formData();
         const file = formData.get("file") as File;
@@ -37,7 +32,6 @@ export async function POST(request: Request) {
         const uint8 = new Uint8Array(buffer);
 
         // 1. Calculate the content hash directly from the uploaded file bytes.
-        // We expect the uploaded file to be the watermarked one.
         const contentHash = keccak256(uint8);
 
         // 2. Check for the watermark signal within the uploaded file.
@@ -51,7 +45,8 @@ export async function POST(request: Request) {
             const c = await getContract();
             const registration = await c.registrations(contentHash);
             const blockNumber = registration[1];
-            if (blockNumber > 0) {
+            // Check for a valid, non-zero block number.
+            if (blockNumber && BigInt(blockNumber.toString()) > 0) {
                 onChainProof = {
                     txHash: "N/A (direct contract state lookup)",
                     contentHash,
@@ -62,7 +57,6 @@ export async function POST(request: Request) {
             }
         } catch (e) {
             console.error("On-chain lookup failed:", e);
-            // Not a fatal error, just means no proof was found.
         }
 
         let signal = "No AI watermark detected";
@@ -71,7 +65,6 @@ export async function POST(request: Request) {
         } else if (hasWatermark && !onChainProof) {
             signal = "Medium: Watermarked AI, but no on-chain registration found";
         } else if (!hasWatermark && onChainProof) {
-            // This case should be rare, implying the watermark was stripped.
             signal = "Weak: On-chain registration found, but image is not watermarked";
         } else { // !hasWatermark && !onChainProof
              signal = "None: No on-chain registration found and no watermark detected.";
