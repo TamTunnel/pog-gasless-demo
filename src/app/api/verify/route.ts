@@ -6,21 +6,26 @@ import { keccak256 } from "viem";
 export const dynamic = "force-dynamic";
 
 const CONTRACT_ADDRESS = "0xf0D814C2Ff842C695fCd6814Fa8776bEf70814F3";
-// DIAGNOSTIC: Using public Base RPC to isolate the issue.
-const RPC_URL = `https://mainnet.base.org`;
+const RPC_URL = `https://rpc.ankr.com/base/${process.env.ANKR_API_KEY}`;
+
+// CORRECT: ABI now includes the 'Generated' event for log queries.
 const ABI = [
-    "function registrations(bytes32) view returns (address, uint256, string, string, bytes32, bytes32, bytes32)"
+    "event Generated(bytes32 indexed contentHash, bytes32 indexed perceptualHash, string indexed tool, string pipeline, bytes32 paramsHash, bytes32 parentHash, bytes32 attesterSig, uint256 timestamp, address registrar, uint16 version)"
 ];
 
-// Creates a new contract instance for reading.
 async function getContract() {
-    // Explicitly connect to the Base network for robustness.
+    if (!process.env.ANKR_API_KEY) {
+        throw new Error("Missing ANKR_API_KEY environment variable.");
+    }
     const provider = new ethers.JsonRpcProvider(RPC_URL, 'base');
     return new ethers.Contract(CONTRACT_ADDRESS, ABI, provider);
 }
 
 export async function POST(request: Request) {
-    console.log("--- RUNNING LATEST VERIFY API ROUTE (v.PublicRPC-Test) ---"); 
+    console.log("--- RUNNING LATEST VERIFY API ROUTE (v.LogQuery-Fix) ---"); 
+    if (!process.env.ANKR_API_KEY) {
+        return NextResponse.json({ error: "Missing ANKR_API_KEY environment variable." }, { status: 500 });
+    }
     try {
         const formData = await request.formData();
         const file = formData.get("file") as File;
@@ -30,29 +35,29 @@ export async function POST(request: Request) {
 
         const buffer = await file.arrayBuffer();
         const uint8 = new Uint8Array(buffer);
-
-        // 1. Calculate the content hash directly from the uploaded file bytes.
         const contentHash = keccak256(uint8);
 
-        // 2. Check for the watermark signal within the uploaded file.
         const last32 = uint8.slice(-32);
         const hasWatermark =
             last32.length === 32 && Array.from(last32).every((b) => (b & 1) === 1);
 
-        // 3. Check for the content hash on-chain.
         let onChainProof: any = null;
         try {
             const c = await getContract();
-            const registration = await c.registrations(contentHash);
-            const blockNumber = registration[1];
-            // Check for a valid, non-zero block number.
-            if (blockNumber && BigInt(blockNumber.toString()) > 0) {
+            // CORRECT: Use queryFilter to search for event logs.
+            const filter = c.filters.Generated(contentHash);
+            // Query logs from the contract's creation block for completeness.
+            const logs = await c.queryFilter(filter, 14364353);
+
+            if (logs.length > 0) {
+                const log = logs[logs.length-1]; // Use the most recent log
+                const args = log.args;
                 onChainProof = {
-                    txHash: "N/A (direct contract state lookup)",
-                    contentHash,
-                    tool: registration[2],
-                    model: registration[3],
-                    timestamp: new Date(Number(blockNumber) * 1000).toISOString(),
+                    txHash: log.transactionHash,
+                    contentHash: args.contentHash,
+                    tool: args.tool,
+                    model: args.pipeline, // Mapped from pipeline
+                    timestamp: new Date(Number(args.timestamp) * 1000).toISOString(),
                 };
             }
         } catch (e) {
