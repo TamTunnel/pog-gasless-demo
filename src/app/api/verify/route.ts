@@ -11,15 +11,18 @@ const pogAbi = [
   ),
 ];
 
-// Switched to a more reliable public RPC provider (Ankr)
+// Using Ankr RPC with an API Key
 const publicClient = createPublicClient({
   chain: base,
-  transport: http("https://rpc.ankr.com/base"),
+  transport: http(`https://rpc.ankr.com/base/${process.env.ANKR_API_KEY}`),
 });
 
 const POG_REGISTRY_ADDRESS = "0xf0D814C2Ff842C695fCd6814Fa8776bEf70814F3";
 
 export async function POST(request: Request) {
+  if (!process.env.ANKR_API_KEY) {
+    return NextResponse.json({ error: "Missing ANKR_API_KEY environment variable." }, { status: 500 });
+  }
   try {
     const formData = await request.formData();
     const file = formData.get("file") as File;

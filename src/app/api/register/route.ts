@@ -6,8 +6,8 @@ import { keccak256 } from "viem";
 export const dynamic = "force-dynamic";
 
 const CONTRACT_ADDRESS = "0xf0D814C2Ff842C695fCd6814Fa8776bEf70814F3";
-// Switched to a more reliable public RPC provider (Ankr)
-const RPC_URL = "https://rpc.ankr.com/base";
+// Using Ankr RPC with an API Key
+const RPC_URL = `https://rpc.ankr.com/base/${process.env.ANKR_API_KEY}`;
 
 const ABI = [
   "function register(bytes32 contentHash, bytes32 perceptualHash, string tool, string pipeline, bytes32 paramsHash, bytes32 parentHash, bytes32 attesterSig) external",
@@ -17,6 +17,9 @@ let contract: ethers.Contract | null = null;
 
 async function getContract() {
   if (contract) return contract;
+  if (!process.env.ANKR_API_KEY) {
+    throw new Error("Missing ANKR_API_KEY environment variable.");
+  }
   const pk = process.env.POG_PRIVATE_KEY;
   if (!pk || !pk.startsWith("0x") || pk.length !== 66) {
     throw new Error("Invalid or missing POG_PRIVATE_KEY");
