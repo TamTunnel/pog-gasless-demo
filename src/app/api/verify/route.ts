@@ -1,6 +1,6 @@
 // src/app/api/verify/route.ts
 import { NextResponse } from "next/server";
-import { ethers } from "ethers";
+import { ethers, EventLog } from "ethers"; // Import EventLog for typing
 import { keccak256 } from "viem";
 
 export const dynamic = "force-dynamic";
@@ -8,10 +8,25 @@ export const dynamic = "force-dynamic";
 const CONTRACT_ADDRESS = "0xf0D814C2Ff842C695fCd6814Fa8776bEf70814F3";
 const RPC_URL = `https://rpc.ankr.com/base/${process.env.ANKR_API_KEY}`;
 
-// CORRECT: ABI now includes the 'Generated' event for log queries.
 const ABI = [
     "event Generated(bytes32 indexed contentHash, bytes32 indexed perceptualHash, string indexed tool, string pipeline, bytes32 paramsHash, bytes32 parentHash, bytes32 attesterSig, uint256 timestamp, address registrar, uint16 version)"
 ];
+
+// Define a typed interface for our specific event to satisfy TypeScript during build.
+interface GeneratedEvent extends EventLog {
+  args: {
+    contentHash: string;
+    perceptualHash: string;
+    tool: string;
+    pipeline: string;
+    paramsHash: string;
+    parentHash: string;
+    attesterSig: string;
+    timestamp: bigint;
+    registrar: string;
+    version: number;
+  };
+}
 
 async function getContract() {
     if (!process.env.ANKR_API_KEY) {
@@ -22,7 +37,7 @@ async function getContract() {
 }
 
 export async function POST(request: Request) {
-    console.log("--- RUNNING LATEST VERIFY API ROUTE (v.LogQuery-Fix) ---"); 
+    console.log("--- RUNNING LATEST VERIFY API ROUTE (v.Type-Safe) ---"); 
     if (!process.env.ANKR_API_KEY) {
         return NextResponse.json({ error: "Missing ANKR_API_KEY environment variable." }, { status: 500 });
     }
@@ -44,19 +59,18 @@ export async function POST(request: Request) {
         let onChainProof: any = null;
         try {
             const c = await getContract();
-            // CORRECT: Use queryFilter to search for event logs.
             const filter = c.filters.Generated(contentHash);
-            // Query logs from the contract's creation block for completeness.
             const logs = await c.queryFilter(filter, 14364353);
 
             if (logs.length > 0) {
-                const log = logs[logs.length-1]; // Use the most recent log
+                // Cast the log to our specific, typed interface.
+                const log = logs[logs.length - 1] as GeneratedEvent;
                 const args = log.args;
                 onChainProof = {
                     txHash: log.transactionHash,
                     contentHash: args.contentHash,
                     tool: args.tool,
-                    model: args.pipeline, // Mapped from pipeline
+                    model: args.pipeline,
                     timestamp: new Date(Number(args.timestamp) * 1000).toISOString(),
                 };
             }
