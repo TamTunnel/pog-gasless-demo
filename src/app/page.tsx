@@ -44,6 +44,25 @@ export default function Home() {
         </TabsContent>
       </Tabs>
 
+      {/* How it works */}
+      <section className="mt-16 w-full max-w-4xl mx-auto text-gray-300 text-sm">
+        <h2 className="text-2xl font-bold text-center mb-6 text-white">How The Demo Works</h2>
+        <ul className="space-y-3 list-disc list-inside bg-gray-800/50 p-6 rounded-lg">
+            <li>
+                Upload an AI-generated image. PoG applies a watermark, registers it on the base chain, and automatically downloads it to your browser.
+            </li>
+            <li>
+                To verify, upload the image under "Verify." It will check the hash and show the result. Transactions can be verified on Basescan/Etherscan here <a href="https://basescan.org/address/0xf0D814C2Ff842C695fCd6814Fa8776bEf70814F3" target="_blank" rel="noopener noreferrer" className="text-blue-400 underline hover:text-blue-300">(PoG Registry Contract)</a>.
+            </li>
+        </ul>
+        <div className="mt-6 bg-gray-800/50 p-6 rounded-lg">
+            <p className="font-bold text-gray-200 mb-2">Note:</p>
+            <p>
+                When using an actual AI generation tool, the user prompts the tool as usual. The generated image is automatically watermarked and registered on-chain in gasless mode, without disrupting or exposing the user. The prompt, tool, model, and relayer’s wallet address are recorded, preserving complete user anonymity. Every single AI generated media can be recorded on-chain this way. The tool works on video as well.
+            </p>
+        </div>
+      </section>
+
       {/* Comparison Table */}
       <section className="mt-16 w-full max-w-5xl">
         <h2 className="text-3xl font-bold text-center mb-8 text-white">Advantages vs Everything Else</h2>

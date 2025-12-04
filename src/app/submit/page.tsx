@@ -48,6 +48,8 @@ for (let i = startIdx; i < watermarked.length; i++) {
         // Send to backend
         const formData = new FormData();
         formData.append("file", watermarkedFile);
+        formData.append("tool", "PoGDemo");
+        formData.append("prompt", "This is a default prompt for PoG relay demo");
         if (parentHash && /^0x[a-fA-F0-9]{64}$/.test(parentHash)) {
           formData.append("parentHash", parentHash);
         }
