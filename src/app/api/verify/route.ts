@@ -22,7 +22,8 @@ const POG_REGISTRY_ADDRESS = "0xf0D814C2Ff842C695fCd6814Fa8776bEf70814F3" as Add
 async function verifyOnChain(contentHash: `0x${string}`) {
     try {
         const latestBlock = await publicClient.getBlockNumber();
-        const fromBlock = latestBlock > 7500n ? latestBlock - 7500n : 0n;
+        // Reduced block range for testing as requested.
+        const fromBlock = latestBlock > 500n ? latestBlock - 500n : 0n;
 
         const logs = await publicClient.getLogs({
             address: POG_REGISTRY_ADDRESS,
