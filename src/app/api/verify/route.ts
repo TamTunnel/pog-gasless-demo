@@ -2,7 +2,7 @@
 import { NextResponse } from "next/server";
 import { createPublicClient, http, parseAbiItem, keccak256, type Address } from "viem";
 import { base } from "viem/chains";
-import { ಇನ್ನೆರಡು } from '@/lib/pog';
+import { detectWatermark } from '@/lib/pog';
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +22,6 @@ const POG_REGISTRY_ADDRESS = "0xf0D814C2Ff842C695fCd6814Fa8776bEf70814F3" as Add
 async function verifyOnChain(contentHash: `0x${string}`) {
     try {
         const latestBlock = await publicClient.getBlockNumber();
-        // Search a reasonable range of recent blocks (e.g., last ~48 hours)
         const fromBlock = latestBlock > 7500n ? latestBlock - 7500n : 0n;
 
         const logs = await publicClient.getLogs({
@@ -66,15 +65,8 @@ export async function POST(request: Request) {
         
         const imageBuffer = Buffer.from(await file.arrayBuffer());
 
-        // 1. Calculate content hash
         const contentHash = keccak256(imageBuffer as any);
-
-        // 2. Detect watermark
-        // This is a placeholder for the actual watermark detection logic.
-        // It uses the imported 'pog' library function.
-        const watermarkDetected = await ಇನ್ನೆರಡು(imageBuffer);
-
-        // 3. Verify on-chain
+        const watermarkDetected = await detectWatermark(imageBuffer);
         const onChainProof = await verifyOnChain(contentHash);
         
         let signal = "Weak: No watermark detected";
@@ -83,7 +75,6 @@ export async function POST(request: Request) {
         } else if (watermarkDetected) {
             signal = "Medium: Watermark found, but no on-chain proof found";
         } else if (onChainProof) {
-            // This case might be interesting: proof exists, but watermark is gone.
             signal = "Medium: On-chain proof found, but no watermark detected in image";
         }
         
@@ -97,7 +88,6 @@ export async function POST(request: Request) {
 
     } catch (error: any) {
         console.error("Verify API Error:", error);
-        // Special handling for JSON parsing errors vs. other errors
         if (error instanceof SyntaxError) {
              return NextResponse.json({ error: "Invalid request format. Expected an image upload." }, { status: 400 });
         }
