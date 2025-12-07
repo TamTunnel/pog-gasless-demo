@@ -37,13 +37,12 @@ export async function POST(request: Request) {
     let onChainProof = null;
     let onChainError = null;
     try {
-      // Correct V2 API endpoint with /v2/ path and chainid as per Etherscan documentation.
+      // CORRECTED: Removed fromBlock and toBlock to allow the API to use its index for the topic search across all blocks.
       const res = await fetch(
         `https://api.etherscan.io/v2/api?module=logs&action=getLogs` +
         `&address=${CONTRACT_ADDRESS}` +
         `&topic0=${GENERATED_EVENT_TOPIC}` +
-        `&topic1=0x${contentHash.slice(2)}` + 
-        `&fromBlock=0&toBlock=latest` +
+        `&topic1=${contentHash}` + 
         `&page=1&offset=1` +
         `&apikey=${ETHERSCAN_API_KEY}` +
         `&chainid=${BASE_CHAIN_ID}`
