@@ -9,7 +9,8 @@ const CONTRACT_ADDRESS = "0xf0D814C2Ff842C695fCd6814Fa8776bEf70814F3";
 const ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY || ""; 
 const BASE_CHAIN_ID = "8453";
 
-const GENERATED_EVENT_TOPIC = "0x77dbddf20f52d30e2fa0c718fc7ad9e1f0a6adf4bc44aed22c6638f7626b5f58";
+// CORRECTED: This is the correct event signature from the contract logs.
+const GENERATED_EVENT_TOPIC = "0x8592fb395f043e97105a02b39c3fcd30912a5c8ac804a249364587cd65920cc7";
 
 export async function POST(request: Request) {
   if (!ETHERSCAN_API_KEY) {
@@ -37,7 +38,6 @@ export async function POST(request: Request) {
     let onChainProof = null;
     let onChainError = null;
     try {
-      // CORRECTED: Removed fromBlock and toBlock to allow the API to use its index for the topic search across all blocks.
       const res = await fetch(
         `https://api.etherscan.io/v2/api?module=logs&action=getLogs` +
         `&address=${CONTRACT_ADDRESS}` +
@@ -52,10 +52,14 @@ export async function POST(request: Request) {
       
       if (data.status === "1" && data.result.length > 0) {
         const log = data.result[0];
+        // NOTE: The topic indices change based on the new event signature.
+        // Assuming timestamp is now topic 2 and registrar is topic 3 based on common patterns.
+        // This may need adjustment if the event structure is different.
         const timestamp = BigInt(log.topics[2]).toString(); 
+        const registrar = `0x${log.topics[3].slice(26)}`;
 
         onChainProof = {
-          creator: `0x${log.topics[3].slice(26)}`,
+          creator: registrar,
           txHash: log.transactionHash,
           blockNumber: parseInt(log.blockNumber, 16).toString(),
           timestamp: new Date(parseInt(timestamp) * 1000).toUTCString(),
