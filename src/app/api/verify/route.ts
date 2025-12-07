@@ -6,8 +6,8 @@ import { keccak256 } from "viem";
 export const dynamic = "force-dynamic";
 
 const CONTRACT_ADDRESS = "0xf0D814C2Ff842C695fCd6814Fa8776bEf70814F3";
-// The API key is from your Etherscan account, but the endpoint for the Base network is api.basescan.org.
 const ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY || ""; 
+const BASE_CHAIN_ID = "8453";
 
 const GENERATED_EVENT_TOPIC = "0x77dbddf20f52d30e2fa0c718fc7ad9e1f0a6adf4bc44aed22c6638f7626b5f58";
 
@@ -37,15 +37,16 @@ export async function POST(request: Request) {
     let onChainProof = null;
     let onChainError = null;
     try {
-      // Corrected API endpoint for the Base network as per Etherscan & Base documentation.
+      // Correct V2 API endpoint with chainid as per Etherscan documentation.
       const res = await fetch(
-        `https://api.basescan.org/api?module=logs&action=getLogs` +
+        `https://api.etherscan.io/api?module=logs&action=getLogs` +
         `&address=${CONTRACT_ADDRESS}` +
         `&topic0=${GENERATED_EVENT_TOPIC}` +
         `&topic1=0x${contentHash.slice(2)}` + 
         `&fromBlock=0&toBlock=latest` +
-        `&page=1&offset=1` + // We only need the first event
-        `&apikey=${ETHERSCAN_API_KEY}`
+        `&page=1&offset=1` +
+        `&apikey=${ETHERSCAN_API_KEY}` +
+        `&chainid=${BASE_CHAIN_ID}`
       );
 
       const data = await res.json();
@@ -63,7 +64,7 @@ export async function POST(request: Request) {
       } else if (data.status === "0") {
         onChainError = data.message;
         if (data.result && typeof data.result === 'string') {
-           onChainError = data.result; // e.g., "Invalid API Key"
+           onChainError = data.result; 
         }
       }
     } catch (e: any) {
