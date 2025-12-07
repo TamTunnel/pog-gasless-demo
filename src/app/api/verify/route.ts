@@ -37,9 +37,9 @@ export async function POST(request: Request) {
     let onChainProof = null;
     let onChainError = null;
     try {
-      // Correct V2 API endpoint with chainid as per Etherscan documentation.
+      // Correct V2 API endpoint with /v2/ path and chainid as per Etherscan documentation.
       const res = await fetch(
-        `https://api.etherscan.io/api?module=logs&action=getLogs` +
+        `https://api.etherscan.io/v2/api?module=logs&action=getLogs` +
         `&address=${CONTRACT_ADDRESS}` +
         `&topic0=${GENERATED_EVENT_TOPIC}` +
         `&topic1=0x${contentHash.slice(2)}` + 
